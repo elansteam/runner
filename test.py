@@ -1,7 +1,9 @@
 import safe_runner_lib
+import time
 
-x = safe_runner_lib.SafeRunner("path", "args")
+x = safe_runner_lib.SafeRunner("/home/parat07/CLionProjects/project/test/a", "13\n")
 while not x.IsEnded():
-    print("not ended")
-print(x.GetOutput().res)
+    time.sleep(0.5)
+
+# print(x.GetOutput().res)
 print(x.GetOutput().output)

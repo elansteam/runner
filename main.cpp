@@ -1,6 +1,12 @@
 #include <iostream>
 #include "safe-runner/runner.h"
 
+using namespace std;
+
 int main() {
-    std::cout << "Hello, elans!" << std::endl;
+    elans::runner::SafeRunner runner("/home/parat07/CLionProjects/project/test/a", "13\n");
+    while (!runner.IsEnded()) {
+//        cout << "waiting..." << endl;
+    }
+    cout << runner.GetOutput().output << endl;
 }

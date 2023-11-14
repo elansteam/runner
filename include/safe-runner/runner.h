@@ -63,7 +63,22 @@ namespace elans {
                 }
                 return *ptr_;
             }
+
+            const T &operator*() const {
+                if (!*inialized_) {
+                    throw std::runtime_error("operator* for nullptr");
+                }
+                return *ptr_;
+            }
+
             T *operator->() {
+                if (!*inialized_) {
+                    throw std::runtime_error("operator-> for nullptr");
+                }
+                return ptr_;
+            }
+
+            const T *operator->() const {
                 if (!*inialized_) {
                     throw std::runtime_error("operator-> for nullptr");
                 }
@@ -89,7 +104,7 @@ namespace elans {
                 ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
                 dup2(program_input[0], STDIN_FILENO);
                 dup2(program_output[1], STDOUT_FILENO);
-                execl(path.data(), nullptr);
+                execl(path.data(), "", nullptr);
                 throw CantOpenExecutable(path);
             }
 
@@ -103,6 +118,8 @@ namespace elans {
             }
 
             void ptrace_process(const std::string &input) {
+                write(program_input[1], input.data(), input.size());
+                close(program_input[1]);
                 int status;
                 waitpid(slave_pid, &status, 0);
                 while (!WIFEXITED(status)) {
@@ -120,14 +137,14 @@ namespace elans {
                             }
                     }
                 }
-                write(program_input[1], input.data(), input.size());
-                close(program_input[1]);
                 std::string output(1024, 'a');
                 output.resize(read(program_output[0], output.data(), 1024));
                 res.emplace(RunningResult::OK, output);
+                *slave_ended = true;
             }
         public:
             SafeRunner(const std::string &path, const std::string &input) {
+                slave_ended.emplace(false);
                 pipe(program_input);
                 pipe(program_output);
                 slave_pid = fork();
@@ -153,12 +170,12 @@ namespace elans {
                 return *res;
             }
             bool IsEnded() const {
-                return slave_ended;
+                return *slave_ended;
             }
         private:
             int program_input[2], program_output[2];
             SharedMem<TestingResult> res;
-            bool slave_ended = false;
+            SharedMem<bool> slave_ended;
             pid_t slave_pid;
         };
     } // namespace runner
