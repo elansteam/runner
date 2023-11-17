@@ -6,6 +6,7 @@
 #include <sys/mman.h>
 #include <sys/ptrace.h>
 #include <unistd.h>
+
 #include <bits/stdc++.h>
 
 namespace elans {
@@ -118,7 +119,6 @@ namespace elans {
                 state.rsi = SIGKILL;
                 ptrace(PTRACE_SETREGS, slave_pid, 0, &state);
                 ptrace(PTRACE_CONT, slave_pid, 0, 0);
-                waitpid(slave_pid, nullptr, 0);
             }
 
             void ptrace_process(const std::string &input) {
@@ -126,21 +126,29 @@ namespace elans {
                 close(program_input[1]);
                 int status;
                 waitpid(slave_pid, &status, 0);
+                ptrace(PTRACE_SETOPTIONS, slave_pid, 0, PTRACE_O_TRACESYSGOOD);
                 while (!WIFEXITED(status)) {
-                    user_regs_struct state;
+                    user_regs_struct state{};
                     ptrace(PTRACE_SYSCALL, slave_pid, 0, 0);
                     waitpid(slave_pid, &status, 0);
-                    switch (state.orig_rax) {
-                        case __NR_fork:
-                            kill_in_syscall(state);
-                            res.emplace(RunningResult::SE, "");
-                            break;
-                        case __NR_exit:
-                            if (state.rdi != 0) {
-                                res.emplace(RunningResult::RE, "");
-                            } else {
-                                res.emplace(RunningResult::OK, "");
-                            }
+                    if (WIFSTOPPED(status) && WSTOPSIG(status) & 0x80) {
+                        ptrace(PTRACE_GETREGS, slave_pid, 0, &state);
+                        switch (state.orig_rax) {
+                            case __NR_clone:
+                            case __NR_fork:
+                                kill_in_syscall(state);
+                                res.emplace(RunningResult::SE, "");
+                                return;
+                            case __NR_exit:
+                                if (state.rdi != 0) {
+                                    res.emplace(RunningResult::RE, "");
+                                } else {
+                                    res.emplace(RunningResult::OK, "");
+                                }
+                                return;
+                        }
+                        ptrace(PTRACE_SYSCALL, slave_pid, 0, 0);
+                        waitpid(slave_pid, &status, 0);
                     }
                 }
                 if (!res.has_value()) {
@@ -148,11 +156,9 @@ namespace elans {
                     output.resize(read(program_output[0], output.data(), 1024));
                     res.emplace(RunningResult::OK, output);
                 }
-                *slave_ended = true;
             }
         public:
             SafeRunner(const std::string &path, const std::string &input) {
-                slave_ended.emplace(false);
                 pipe(program_input);
                 pipe(program_output);
                 slave_pid = fork();
@@ -177,13 +183,9 @@ namespace elans {
             TestingResult GetOutput() {
                 return *res;
             }
-            bool IsEnded() const {
-                return *slave_ended;
-            }
         private:
             int program_input[2], program_output[2];
             SharedMem<TestingResult> res;
-            SharedMem<bool> slave_ended;
             pid_t slave_pid;
         };
     } // namespace runner
