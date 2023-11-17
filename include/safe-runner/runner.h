@@ -93,6 +93,10 @@ namespace elans {
                 new (ptr_) T(args...);
                 *inialized_ = true;
             }
+
+            bool has_value() const {
+                return *inialized_;
+            }
         private:
             bool *inialized_;
             T *ptr_;
@@ -129,6 +133,8 @@ namespace elans {
                     switch (state.orig_rax) {
                         case __NR_fork:
                             kill_in_syscall(state);
+                            res.emplace(RunningResult::SE, "");
+                            break;
                         case __NR_exit:
                             if (state.rdi != 0) {
                                 res.emplace(RunningResult::RE, "");
@@ -137,9 +143,11 @@ namespace elans {
                             }
                     }
                 }
-                std::string output(1024, 'a');
-                output.resize(read(program_output[0], output.data(), 1024));
-                res.emplace(RunningResult::OK, output);
+                if (!res.has_value()) {
+                    std::string output(1024, 'a');
+                    output.resize(read(program_output[0], output.data(), 1024));
+                    res.emplace(RunningResult::OK, output);
+                }
                 *slave_ended = true;
             }
         public:
