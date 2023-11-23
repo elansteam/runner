@@ -6,6 +6,7 @@
 #include <sys/mman.h>
 #include <sys/ptrace.h>
 #include <unistd.h>
+#include <sys/resource.h>
 
 #include <bits/stdc++.h>
 
@@ -105,67 +106,16 @@ namespace elans {
         };
 
         class SafeRunner {
-            void set_up_slave(const std::string &path) {
-                ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
-                dup2(program_input[0], STDIN_FILENO);
-                dup2(program_output[1], STDOUT_FILENO);
-                execl(path.data(), "", nullptr);
-                throw CantOpenExecutable(path);
-            }
-
-            void kill_in_syscall(user_regs_struct &state) {
-                state.orig_rax = __NR_kill;
-                state.rdi = slave_pid;
-                state.rsi = SIGKILL;
-                ptrace(PTRACE_SETREGS, slave_pid, 0, &state);
-                ptrace(PTRACE_CONT, slave_pid, 0, 0);
-            }
-
-            void ptrace_process(const std::string &input) {
-                write(program_input[1], input.data(), input.size());
-                close(program_input[1]);
-                int status;
-                waitpid(slave_pid, &status, 0);
-                ptrace(PTRACE_SETOPTIONS, slave_pid, 0, PTRACE_O_TRACESYSGOOD);
-                while (!WIFEXITED(status)) {
-                    user_regs_struct state{};
-                    ptrace(PTRACE_SYSCALL, slave_pid, 0, 0);
-                    waitpid(slave_pid, &status, 0);
-                    if (WIFSTOPPED(status) && WSTOPSIG(status) & 0x80) {
-                        ptrace(PTRACE_GETREGS, slave_pid, 0, &state);
-                        switch (state.orig_rax) {
-                            case __NR_clone:
-                            case __NR_fork:
-                                kill_in_syscall(state);
-                                res.emplace(RunningResult::SE, "");
-                                return;
-                            case __NR_exit:
-                                if (state.rdi != 0) {
-                                    res.emplace(RunningResult::RE, "");
-                                } else {
-                                    res.emplace(RunningResult::OK, "");
-                                }
-                                return;
-                        }
-                        ptrace(PTRACE_SYSCALL, slave_pid, 0, 0);
-                        waitpid(slave_pid, &status, 0);
-                    }
-                }
-                if (!res.has_value()) {
-                    std::string output(1024, 'a');
-                    output.resize(read(program_output[0], output.data(), 1024));
-                    res.emplace(RunningResult::OK, output);
-                }
-            }
         public:
             SafeRunner(const std::string &path, const std::string &input) {
-                pipe(program_input);
-                pipe(program_output);
-                slave_pid = fork();
-                if (slave_pid) {
-                    ptrace_process(input);
+                group_number_ = groups_amount_++;
+                pipe(program_input_);
+                pipe(program_output_);
+                slave_pid_ = fork();
+                if (slave_pid_) {
+                    PtraceProcess(input);
                 } else {
-                    set_up_slave(path);
+                    SetUpSlave(path);
                 }
             }
             enum class RunningResult {
@@ -176,17 +126,85 @@ namespace elans {
                 SE
             };
 
+            struct Limits {
+                uint64_t threads;
+                uint64_t memory; // kb
+            };
+
             struct TestingResult {
                 RunningResult res;
                 std::string output;
             };
             TestingResult GetOutput() {
-                return *res;
+                return *res_;
             }
         private:
-            int program_input[2], program_output[2];
-            SharedMem<TestingResult> res;
-            pid_t slave_pid;
+            int program_input_[2], program_output_[2];
+            SharedMem<TestingResult> res_;
+            pid_t slave_pid_;
+            uint32_t group_number_;
+            static uint32_t groups_amount_;
+
+            void SetUpSlave(const std::string &path) {
+                ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
+                dup2(program_input_[0], STDIN_FILENO);
+                dup2(program_output_[1], STDOUT_FILENO);
+                execl(path.data(), "", nullptr);
+                throw CantOpenExecutable(path);
+            }
+
+            void KillInSyscall(user_regs_struct &state) {
+                state.orig_rax = __NR_kill;
+                state.rdi = slave_pid_;
+                state.rsi = SIGKILL;
+                ptrace(PTRACE_SETREGS, slave_pid_, 0, &state);
+                ptrace(PTRACE_CONT, slave_pid_, 0, 0);
+            }
+
+            void PtraceProcess(const std::string &input) {
+                write(program_input_[1], input.data(), input.size());
+                close(program_input_[1]);
+                int status;
+                waitpid(slave_pid_, &status, 0);
+                ptrace(PTRACE_SETOPTIONS, slave_pid_, 0, PTRACE_O_TRACESYSGOOD);
+                while (!WIFEXITED(status)) {
+                    user_regs_struct state{};
+                    ptrace(PTRACE_SYSCALL, slave_pid_, 0, 0);
+                    waitpid(slave_pid_, &status, 0);
+                    if (WIFSTOPPED(status) && WSTOPSIG(status) & 0x80) {
+                        ptrace(PTRACE_GETREGS, slave_pid_, 0, &state);
+                        switch (state.orig_rax) {
+                            case __NR_clone:
+                            case __NR_fork:
+                                KillInSyscall(state);
+                                res_.emplace(RunningResult::SE, "");
+                                return;
+                            case __NR_exit:
+                                if (state.rdi != 0) {
+                                    res_.emplace(RunningResult::RE, "");
+                                } else {
+                                    res_.emplace(RunningResult::OK, "");
+                                }
+                                return;
+                        }
+                        ptrace(PTRACE_SYSCALL, slave_pid_, 0, 0);
+                        waitpid(slave_pid_, &status, 0);
+                    }
+                }
+                if (!res_.has_value()) {
+                    std::string output(1024, 'a');
+                    output.resize(read(program_output_[0], output.data(), 1024));
+                    res_.emplace(RunningResult::OK, output);
+                }
+            }
+
+            void SetUpCgroups(Limits limits) {
+                std::ofstream fout("/sys/fs/cgroup/cpuset/group" + std::to_string(group_number_) + "/tasks", std::ios::app);
+                fout << slave_pid_ << std::endl;
+                fout.open("/sys/fs/cgroup/memory/group" + std::to_string(group_number_) + "/memory.limit_in_bytes", std::ios::app);
+                fout << limits.memory << std::endl;
+            }
         };
+        uint32_t SafeRunner::groups_amount_ = 0;
     } // namespace runner
 } // namespace elans

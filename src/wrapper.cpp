@@ -10,7 +10,7 @@ PYBIND11_MODULE(safe_runner_lib, m) {
 
     py::class_<SafeRunner::TestingResult>(runner, "TestingResult", py::dynamic_attr())
             .def(py::init<>())
-            .def_readwrite("res", &SafeRunner::TestingResult::res)
+            .def_readwrite("res_", &SafeRunner::TestingResult::res)
             .def_readwrite("output", &SafeRunner::TestingResult::output);
 
     runner  .def(py::init<std::string, std::string>(), "gets path and input")

@@ -2,3 +2,5 @@
 /venv/
 safe_runner_lib.cpython-310-x86_64-linux-gnu.so
 /build/
+/cmake-build-debug-mingw/
+/cmake-build-debug-wsl/
