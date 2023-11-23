@@ -107,17 +107,6 @@ namespace elans {
 
         class SafeRunner {
         public:
-            SafeRunner(const std::string &path, const std::string &input) {
-                group_number_ = groups_amount_++;
-                pipe(program_input_);
-                pipe(program_output_);
-                slave_pid_ = fork();
-                if (slave_pid_) {
-                    PtraceProcess(input);
-                } else {
-                    SetUpSlave(path);
-                }
-            }
             enum class RunningResult {
                 TL,
                 ML,
@@ -135,6 +124,20 @@ namespace elans {
                 RunningResult res;
                 std::string output;
             };
+
+            SafeRunner(const std::string &path, const std::string &input, Limits lims) {
+                group_number_ = groups_amount_++;
+                pipe(program_input_);
+                pipe(program_output_);
+                slave_pid_ = fork();
+                if (slave_pid_) {
+                    SetUpCgroups(lims.memory);
+                    PtraceProcess(input);
+                } else {
+                    SetUpSlave(path);
+                }
+            }
+
             TestingResult GetOutput() {
                 return *res_;
             }
@@ -161,7 +164,10 @@ namespace elans {
                 ptrace(PTRACE_CONT, slave_pid_, 0, 0);
             }
 
-            void PtraceProcess(const std::string &input) {
+            void PtraceProcess(const std::string &input, uint64_t time_limit) {
+                const auto begin_time = std::chrono::steady_clock::now();
+                const rlimit *lim = new rlimit(time_limit / 1000, time_limit / 1000);
+                setrlimit(RLIMIT_CPU, lim);
                 write(program_input_[1], input.data(), input.size());
                 close(program_input_[1]);
                 int status;
@@ -191,6 +197,12 @@ namespace elans {
                         waitpid(slave_pid_, &status, 0);
                     }
                 }
+                const auto end_time = std::chrono::steady_clock::now();
+                auto period = end_time - begin_time;
+                if (std::chrono::duration_cast<std::chrono::milliseconds>(period) >= std::chrono::milliseconds(time_limit)) {
+                    res_.emplace(RunningResult::TL, "");
+                    return;
+                }
                 if (!res_.has_value()) {
                     std::string output(1024, 'a');
                     output.resize(read(program_output_[0], output.data(), 1024));
@@ -198,11 +210,11 @@ namespace elans {
                 }
             }
 
-            void SetUpCgroups(Limits limits) {
+            void SetUpCgroups(uint64_t memory_limit) {
                 std::ofstream fout("/sys/fs/cgroup/cpuset/group" + std::to_string(group_number_) + "/tasks", std::ios::app);
                 fout << slave_pid_ << std::endl;
                 fout.open("/sys/fs/cgroup/memory/group" + std::to_string(group_number_) + "/memory.limit_in_bytes", std::ios::app);
-                fout << limits.memory << std::endl;
+                fout << memory_limit << std::endl;
             }
         };
         uint32_t SafeRunner::groups_amount_ = 0;
