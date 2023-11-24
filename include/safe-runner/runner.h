@@ -186,8 +186,12 @@ namespace elans {
                                 res_.emplace(RunningResult::SE, "");
                                 return;
                             case __NR_exit:
-                                if (state.rdi != 0) {
-                                    res_.emplace(RunningResult::RE, "");
+                                if (state.rdi == 137) {
+                                    res_.emplace(RunningResult::ML, "");
+                                } else if (state.rdi != 0) {
+                                    if (!res_.has_value()) {
+                                        res_.emplace(RunningResult::RE, "");
+                                    }
                                 } else {
                                     res_.emplace(RunningResult::OK, "");
                                 }
