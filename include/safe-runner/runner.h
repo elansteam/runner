@@ -9,6 +9,7 @@
 #include <sys/resource.h>
 
 #include <bits/stdc++.h>
+#include <fcntl.h>
 
 namespace elans {
     namespace runner {
@@ -118,6 +119,7 @@ namespace elans {
             struct Limits {
                 uint64_t threads;
                 uint64_t memory; // kb
+                uint64_t time;// ms
             };
 
             struct TestingResult {
@@ -132,7 +134,7 @@ namespace elans {
                 slave_pid_ = fork();
                 if (slave_pid_) {
                     SetUpCgroups(lims.memory);
-                    PtraceProcess(input);
+                    PtraceProcess(input, lims.time);
                 } else {
                     SetUpSlave(path);
                 }
@@ -215,10 +217,11 @@ namespace elans {
             }
 
             void SetUpCgroups(uint64_t memory_limit) {
-                std::ofstream fout("/sys/fs/cgroup/cpuset/group" + std::to_string(group_number_) + "/tasks", std::ios::app);
+                std::filesystem::create_directory("/sys/fs/cgroup/group" + std::to_string(group_number_));
+                std::ofstream fout("/sys/fs/cgroup/group" + std::to_string(group_number_) + "/cgroup.procs", std::ios::trunc | std::ios::out);
                 fout << slave_pid_ << std::endl;
-                fout.open("/sys/fs/cgroup/memory/group" + std::to_string(group_number_) + "/memory.limit_in_bytes", std::ios::app);
-                fout << memory_limit << std::endl;
+                fout.open("/sys/fs/cgroup/group" + std::to_string(group_number_) + "/memory.max", std::ios::trunc | std::ios::out);
+                fout << std::to_string(memory_limit * 1024) << std::endl;
             }
         };
         uint32_t SafeRunner::groups_amount_ = 0;
