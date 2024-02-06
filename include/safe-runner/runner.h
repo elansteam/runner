@@ -175,7 +175,7 @@ namespace elans {
                 int status;
                 waitpid(slave_pid_, &status, 0);
                 ptrace(PTRACE_SETOPTIONS, slave_pid_, 0, PTRACE_O_TRACESYSGOOD);
-                while (!WIFEXITED(status)) {
+                while (!WIFEXITED(status) && !WIFSTOPPED(status)) {
                     user_regs_struct state{};
                     ptrace(PTRACE_SYSCALL, slave_pid_, 0, 0);
                     waitpid(slave_pid_, &status, 0);
@@ -208,6 +208,9 @@ namespace elans {
                 if (std::chrono::duration_cast<std::chrono::milliseconds>(period) >= std::chrono::milliseconds(time_limit)) {
                     res_.emplace(RunningResult::TL, "");
                     return;
+                }
+                if (WIFSTOPPED(status)) {
+                    res_.emplace(RunningResult::ML, "");
                 }
                 if (!res_.has_value()) {
                     std::string output(1024, 'a');
