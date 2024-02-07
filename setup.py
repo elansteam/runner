@@ -3,7 +3,7 @@ from distutils.core import setup, Extension
 
 ext_modules = [
     Extension(
-        'safe_runner_lib', # название нашей либы
+        'runner_lib_py', # название нашей либы
         ['src/wrapper.cpp'], # файлики которые компилируем
         include_dirs=[pybind11.get_include(), 'include'],  # не забываем добавить инклюды pybind11
         language='c++',

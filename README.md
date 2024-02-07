@@ -19,7 +19,7 @@ import safe_runner_lib
 import safe_runner_lib
 
 # Create an object of runner that opens file at path with args args
-x = safe_runner_lib.SafeRunner("path", "args")
+x = safe_runner_lib.Runner("path", "args")
 # Running 
 while not x.IsEnded():
     print("not ended")

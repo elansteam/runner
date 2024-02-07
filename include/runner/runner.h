@@ -106,7 +106,7 @@ namespace elans {
             int *cur_amount_of_objs_;
         };
 
-        class SafeRunner {
+        class Runner {
         public:
             enum class RunningResult {
                 TL,
@@ -127,7 +127,7 @@ namespace elans {
                 std::string output;
             };
 
-            SafeRunner(const std::string &path, const std::string &input, Limits lims) {
+            Runner(const std::string &path, const std::string &input, Limits lims) {
                 group_number_ = groups_amount_++;
                 pipe(program_input_);
                 pipe(program_output_);
@@ -227,6 +227,6 @@ namespace elans {
                 fout << std::to_string(memory_limit * 1024) << std::endl;
             }
         };
-        uint32_t SafeRunner::groups_amount_ = 0;
+        uint32_t Runner::groups_amount_ = 0;
     } // namespace runner
 } // namespace elans

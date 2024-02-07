@@ -4,21 +4,21 @@
 using namespace std;
 
 int main() {
-    elans::runner::SafeRunner runner("/home/pablo/Documents/project/runner/a", "13\n", elans::runner::SafeRunner::Limits{ .threads = 20ll, .memory = 50ull, .time= 2 });
+    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a", "13\n", elans::runner::Runner::Limits{ .threads = 20ll, .memory = 50ull, .time=2'000 });
     switch (runner.GetOutput().res) {
-        case elans::runner::SafeRunner::RunningResult::RE:
+        case elans::runner::Runner::RunningResult::RE:
             cout << "RE" << endl;
             break;
-        case elans::runner::SafeRunner::RunningResult::OK:
+        case elans::runner::Runner::RunningResult::OK:
             cout << "OK" << endl;
             break;
-        case elans::runner::SafeRunner::RunningResult::ML:
+        case elans::runner::Runner::RunningResult::ML:
             cout << "ML" << endl;
             break;
-        case elans::runner::SafeRunner::RunningResult::SE:
+        case elans::runner::Runner::RunningResult::SE:
             cout << "SE" << endl;
             break;
-        case elans::runner::SafeRunner::RunningResult::TL:
+        case elans::runner::Runner::RunningResult::TL:
             cout << "TL" << endl;
             break;
     }

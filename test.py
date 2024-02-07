@@ -1,4 +1,4 @@
-import safe_runner_lib
+import runner
 import time
 
 x = safe_runner_lib.SafeRunner("/home/parat07/CLionProjects/project/runner/a", "13\n")
