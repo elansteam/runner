@@ -4,7 +4,7 @@ namespace py = pybind11;
 using namespace std;
 using namespace elans::runner;
 
-PYBIND11_MODULE(runner, m) {
+PYBIND11_MODULE(runner_lib_py, m) {
     m.doc() = "safe runner python lib";
 
     py::class_<Runner::TestingResult>(m, "TestingResult")

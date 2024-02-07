@@ -12,7 +12,7 @@ ext_modules = [
 ]
 
 setup(
-    name='safe_runner_lib',
+    name='runner_lib_py',
     version='0.0.1',
     author='PaRat07',
     author_email='pasha.at.phone@gmail.com',
