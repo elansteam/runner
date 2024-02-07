@@ -1,10 +1,10 @@
 #include <iostream>
-#include "safe-runner/runner.h"
+#include "runner/runner.h"
 
 using namespace std;
 
 int main() {
-    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a", "13\n", elans::runner::Runner::Limits{ .threads = 20ll, .memory = 50ull, .time=2'000 });
+    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a", "13\n", elans::runner::Runner::Limits{ .threads = 20ll, .memory = 1024, .time=1'000 });
     switch (runner.GetOutput().res) {
         case elans::runner::Runner::RunningResult::RE:
             cout << "RE" << endl;

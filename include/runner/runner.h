@@ -168,14 +168,15 @@ namespace elans {
 
             void PtraceProcess(const std::string &input, uint64_t time_limit) {
                 const auto begin_time = std::chrono::steady_clock::now();
-                const rlimit *lim = new rlimit(time_limit / 1000, time_limit / 1000);
-                setrlimit(RLIMIT_CPU, lim);
+                std::cout << time_limit / 1000 + (time_limit % 1000 > 0) << std::endl;
+                const rlimit *lim = new rlimit(time_limit / 1000 + (time_limit % 1000 > 0), time_limit / 1000 + (time_limit % 1000 > 0));
+                prlimit(slave_pid_, RLIMIT_CPU, lim, nullptr);
                 write(program_input_[1], input.data(), input.size());
                 close(program_input_[1]);
                 int status;
                 waitpid(slave_pid_, &status, 0);
                 ptrace(PTRACE_SETOPTIONS, slave_pid_, 0, PTRACE_O_TRACESYSGOOD);
-                while (!WIFEXITED(status) && !WIFSTOPPED(status)) {
+                while (!WIFEXITED(status) && !WIFSIGNALED(status)) {
                     user_regs_struct state{};
                     ptrace(PTRACE_SYSCALL, slave_pid_, 0, 0);
                     waitpid(slave_pid_, &status, 0);
@@ -209,7 +210,8 @@ namespace elans {
                     res_.emplace(RunningResult::TL, "");
                     return;
                 }
-                if (WIFSTOPPED(status)) {
+                if (WIFSIGNALED(status)) {
+                    std::cout << WTERMSIG(status) << std::endl;
                     res_.emplace(RunningResult::ML, "");
                 }
                 if (!res_.has_value()) {
@@ -219,12 +221,16 @@ namespace elans {
                 }
             }
 
+            void Write(std::string path, std::string data) {
+                int fd = open(path.data(), O_WRONLY);
+                write(fd, data.data(), data.size());
+                close(fd);
+            }
+
             void SetUpCgroups(uint64_t memory_limit) {
                 std::filesystem::create_directory("/sys/fs/cgroup/group" + std::to_string(group_number_));
-                std::ofstream fout("/sys/fs/cgroup/group" + std::to_string(group_number_) + "/cgroup.procs", std::ios::trunc | std::ios::out);
-                fout << slave_pid_ << std::endl;
-                fout.open("/sys/fs/cgroup/group" + std::to_string(group_number_) + "/memory.max", std::ios::trunc | std::ios::out);
-                fout << std::to_string(memory_limit * 1024) << std::endl;
+                Write("/sys/fs/cgroup/group" + std::to_string(group_number_) + "/cgroup.procs", std::to_string(slave_pid_));
+                Write("/sys/fs/cgroup/group" + std::to_string(group_number_) + "/memory.max", std::to_string(memory_limit * 1024));
             }
         };
         uint32_t Runner::groups_amount_ = 0;
