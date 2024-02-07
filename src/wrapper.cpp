@@ -7,25 +7,25 @@ using namespace elans::runner;
 PYBIND11_MODULE(runner_lib_py, m) {
     m.doc() = "safe runner python lib";
 
-    py::class_<Runner::TestingResult>(m, "TestingResult")
+
+    py::class_<Runner> runner(m, "Runner")
+    runner  .def(py::init<std::string, std::string, Runner::Limits>())
+            .def("GetOutput", &Runner::GetOutput, "wait for the slave program's end");
+
+    py::class_<Runner::TestingResult>(runner, "TestingResult")
             .def(py::init<>())
             .def_readwrite("res", &Runner::TestingResult::res)
             .def_readwrite("output", &Runner::TestingResult::output);
 
 
-    py::class_<Runner>(m, "Runner")
-            .def(py::init<std::string, std::string, Runner::Limits>())
-            .def("GetOutput", &Runner::GetOutput, "wait for the slave program's end");
-
-
-    py::class_<Runner::Limits>(m, "Limits", py::dynamic_attr())
+    py::class_<Runner::Limits>(runner, "Limits", py::dynamic_attr())
             .def(py::init<>())
             .def_readwrite("threads", &Runner::Limits::threads)
             .def_readwrite("memory", &Runner::Limits::memory)
             .def_readwrite("time", &Runner::Limits::time);
 
 
-    py::enum_<Runner::RunningResult>(m, "ExitStatus")
+    py::enum_<Runner::RunningResult>(runner, "ExitStatus")
             .value("TL", Runner::RunningResult::TL)
             .value("ML", Runner::RunningResult::ML)
             .value("OK", Runner::RunningResult::OK)
