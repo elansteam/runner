@@ -189,14 +189,18 @@ namespace elans {
                                 res_.emplace(RunningResult::SE, "");
                                 return;
                             case __NR_exit:
+                            case __NR_exit_group:
                                 if (state.rdi == 137) {
                                     res_.emplace(RunningResult::ML, "");
+                                    return;
                                 } else if (state.rdi != 0) {
                                     if (!res_.has_value()) {
                                         res_.emplace(RunningResult::RE, "");
+                                        return;
                                     }
                                 } else {
                                     res_.emplace(RunningResult::OK, "");
+                                    return;
                                 }
                                 return;
                         }
