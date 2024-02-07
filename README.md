@@ -16,12 +16,15 @@ import safe_runner_lib
 
 ## Example of code
 ```python
-import safe_runner_lib
+import runner_lib_py
 
-# Create an object of runner that opens file at path with args args
-x = safe_runner_lib.Runner("path", "args")
-# Running 
-while not x.IsEnded():
-    print("not ended")
-print(x.GetOutput())
+lim = runner_lib_py.Limits()
+lim.thread = 5
+lim.memory = 100 # kb
+lim.time = 2000 # ms
+x = runner_lib_py.Runner("path_to_executable", "input", lim)
+
+print(x.GetOutput().res)
+print(x.GetOutput().output)
+
 ```
