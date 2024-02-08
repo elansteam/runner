@@ -1,10 +1,10 @@
 import runner_lib_py
 
-lim = runner_lib_py.Limits()
+lim = runner_lib_py.Runner.Limits()
 lim.thread = 5
-lim.memory = 100 # kb
+lim.memory = 1000 # kb
 lim.time = 2000 # ms
-x = runner_lib_py.Runner("path_to_executable", "input", lim)
+x = runner_lib_py.Runner("/home/mf/projects/elan/runner/tester.o", "input", lim)
 
 print(x.GetOutput().res)
 print(x.GetOutput().output)

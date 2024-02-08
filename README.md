@@ -6,17 +6,29 @@ sudo apt install git
 ```
 ### 3. Install python
 ```shell
-sudo apt install python3
+sudo apt install python3-dev
 ```
-### 4. Install pybind
+### 4. Install poetry
 ```shell
-pip3 install pybind
+pip3 install poetry
+```
+### 5. Install Python dependencies
+```shell
+poetry shell
+poetry install
+```
+### 6. Download Git submodules
+```shell
+git submodule update --init --remote --recursive
 ```
 ### 6. Compile library
 ```shell
 python3 setup.py build_ext -i
 ```
 ### 7. Copy file of lib to the your PYTHONPATH/site-packeges
+```shell
+ln -s `ls | grep .so` .venv/lib/python3.11/site-packages/`ls | grep .so`
+```
 ### 8. Add code completion
 ```shell
 PYTHONPATH=./runner_lib_py.cpython-311-x86_64-linux-gnu.so stubgen -m runner_lib_py
