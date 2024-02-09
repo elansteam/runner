@@ -167,7 +167,7 @@ namespace elans {
             }
 
             void PtraceProcess(const std::string &input, uint64_t time_limit) {
-                const auto begin_time = std::chrono::steady_clock::now();
+                const auto begin_time = std::chrono::high_resolution_clock ::now();
                 std::cout << time_limit / 1000 + (time_limit % 1000 > 0) << std::endl;
                 const rlimit *lim = new rlimit(time_limit / 1000 + (time_limit % 1000 > 0), time_limit / 1000 + (time_limit % 1000 > 0));
                 prlimit(slave_pid_, RLIMIT_CPU, lim, nullptr);
@@ -191,8 +191,7 @@ namespace elans {
                             case __NR_exit:
                             case __NR_exit_group:
                                 if (state.rdi == 137) {
-                                    res_.emplace(RunningResult::ML, "");
-                                    return;
+                                    goto checking_result;
                                 } else if (state.rdi != 0) {
                                     if (!res_.has_value()) {
                                         res_.emplace(RunningResult::RE, "");
@@ -208,9 +207,10 @@ namespace elans {
                         waitpid(slave_pid_, &status, 0);
                     }
                 }
-                const auto end_time = std::chrono::steady_clock::now();
+                checking_result:;
+                const auto end_time = std::chrono::high_resolution_clock ::now();
                 auto period = end_time - begin_time;
-                if (std::chrono::duration_cast<std::chrono::milliseconds>(period) >= std::chrono::milliseconds(time_limit)) {
+                if (std::chrono::duration_cast<std::chrono::nanoseconds>(period) >= std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(time_limit))) {
                     res_.emplace(RunningResult::TL, "");
                     return;
                 }
