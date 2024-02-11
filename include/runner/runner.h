@@ -124,13 +124,17 @@ namespace elans {
 
             struct TestingResult {
                 RunningResult res;
-                std::string output;
+                std::string output_path;
             };
 
             Runner(const std::string &path, const std::string &input, Limits lims) {
-                group_number_ = groups_amount_++;
-                pipe(program_input_);
-                pipe(program_output_);
+                runner_number_ = GetRunnerNumber();
+
+                std::string input_path = "/tmp/runner/input" + std::to_string(runner_number_);
+                program_input_ = open(input_path.data(), O_RDWR);
+                std::string output_path = "/tmp/runner/output" + std::to_string(runner_number_);
+                program_output_ = open(output_path.data(), O_RDWR);
+
                 slave_pid_ = fork();
                 if (slave_pid_) {
                     SetUpCgroups(lims.memory);
@@ -144,16 +148,15 @@ namespace elans {
                 return *res_;
             }
         private:
-            int program_input_[2], program_output_[2];
+            int program_input_, program_output_;
             SharedMem<TestingResult> res_;
             pid_t slave_pid_;
-            uint32_t group_number_;
-            static uint32_t groups_amount_;
+            uint32_t runner_number_;
 
             void SetUpSlave(const std::string &path) {
                 ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
-                dup2(program_input_[0], STDIN_FILENO);
-                dup2(program_output_[1], STDOUT_FILENO);
+                dup2(program_input_, STDIN_FILENO);
+                dup2(program_output_, STDOUT_FILENO);
                 execl(path.data(), "", nullptr);
                 throw CantOpenExecutable(path);
             }
@@ -167,12 +170,12 @@ namespace elans {
             }
 
             void PtraceProcess(const std::string &input, uint64_t time_limit) {
-                const auto begin_time = std::chrono::high_resolution_clock ::now();
-                std::cout << time_limit / 1000 + (time_limit % 1000 > 0) << std::endl;
+                const auto begin_time = std::chrono::high_resolution_clock::now();
                 const rlimit *lim = new rlimit(time_limit / 1000 + (time_limit % 1000 > 0), time_limit / 1000 + (time_limit % 1000 > 0));
                 prlimit(slave_pid_, RLIMIT_CPU, lim, nullptr);
-                write(program_input_[1], input.data(), input.size());
-                close(program_input_[1]);
+
+                write(program_input_, input.data(), input.size());
+
                 int status;
                 waitpid(slave_pid_, &status, 0);
                 ptrace(PTRACE_SETOPTIONS, slave_pid_, 0, PTRACE_O_TRACESYSGOOD);
@@ -186,7 +189,9 @@ namespace elans {
                             case __NR_clone:
                             case __NR_fork:
                                 KillInSyscall(state);
-                                res_.emplace(RunningResult::SE, "");
+                                res_.emplace(RunningResult::SE, "/tmp/runner/output" + std::to_string(runner_number_));
+                                close(program_input_);
+                                close(program_output_);
                                 return;
                             case __NR_exit:
                             case __NR_exit_group:
@@ -194,49 +199,78 @@ namespace elans {
                                     goto checking_result;
                                 } else if (state.rdi != 0) {
                                     if (!res_.has_value()) {
-                                        res_.emplace(RunningResult::RE, "");
+                                        res_.emplace(RunningResult::RE, "/tmp/runner/output" + std::to_string(runner_number_));
+                                        close(program_input_);
+                                        close(program_output_);
                                         return;
                                     }
-                                } else {
-                                    res_.emplace(RunningResult::OK, "");
-                                    return;
                                 }
-                                return;
+                                break;
                         }
                         ptrace(PTRACE_SYSCALL, slave_pid_, 0, 0);
                         waitpid(slave_pid_, &status, 0);
                     }
                 }
                 checking_result:;
-                const auto end_time = std::chrono::high_resolution_clock ::now();
-                auto period = end_time - begin_time;
-                if (std::chrono::duration_cast<std::chrono::nanoseconds>(period) >= std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(time_limit))) {
-                    res_.emplace(RunningResult::TL, "");
+
+                close(program_input_);
+                close(program_output_);
+
+                const auto end_time = std::chrono::high_resolution_clock::now();
+                auto period_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - begin_time);
+                auto time_limit_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(time_limit));
+                if (period_nanos >= time_limit_nanos) {
+                    res_.emplace(RunningResult::TL, "/tmp/runner/output" + std::to_string(runner_number_));
                     return;
                 }
+
                 if (WIFSIGNALED(status)) {
-                    std::cout << WTERMSIG(status) << std::endl;
-                    res_.emplace(RunningResult::ML, "");
+                    res_.emplace(RunningResult::ML, "/tmp/runner/output" + std::to_string(runner_number_));
                 }
+
                 if (!res_.has_value()) {
-                    std::string output(1024, 'a');
-                    output.resize(read(program_output_[0], output.data(), 1024));
-                    res_.emplace(RunningResult::OK, output);
+                    res_.emplace(RunningResult::OK, "/tmp/runner/output" + std::to_string(runner_number_));
                 }
             }
 
             void Write(std::string path, std::string data) {
-                int fd = open(path.data(), O_WRONLY);
+                int fd = open(path.data(), O_WRONLY | O_TRUNC);
                 write(fd, data.data(), data.size());
                 close(fd);
             }
 
+            std::string Read(std::string path) {
+                int fd = open(path.data(), O_RDONLY);
+                std::string s;
+                std::string buf(1024, 0);
+                while (true) {
+                    size_t read_amount = read(fd, buf.data(), 1024);
+                    if (read_amount == 1024) {
+                        s += buf;
+                    } else {
+                        buf.resize(read_amount);
+                        s += buf;
+                        break;
+                    }
+                }
+                close(fd);
+                return s;
+            }
+
             void SetUpCgroups(uint64_t memory_limit) {
-                std::filesystem::create_directory("/sys/fs/cgroup/group" + std::to_string(group_number_));
-                Write("/sys/fs/cgroup/group" + std::to_string(group_number_) + "/cgroup.procs", std::to_string(slave_pid_));
-                Write("/sys/fs/cgroup/group" + std::to_string(group_number_) + "/memory.max", std::to_string(memory_limit * 1024));
+                std::filesystem::create_directory("/sys/fs/cgroup/group" + std::to_string(runner_number_));
+                Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/cgroup.procs", std::to_string(slave_pid_));
+                Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.max", std::to_string(memory_limit * 1024));
+            }
+
+            uint16_t GetRunnerNumber() const {
+                static const std::string path_to_runner_num = "/tmp/runner/runner_num";
+                std::fstream finout(path_to_runner_num, std::ios::in | std::ios::out | std::ios::trunc);
+                uint16_t ans;
+                finout >> ans;
+                finout << ans + 1;
+                return ans;
             }
         };
-        uint32_t Runner::groups_amount_ = 0;
     } // namespace runner
 } // namespace elans

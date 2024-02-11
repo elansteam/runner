@@ -16,7 +16,7 @@ PYBIND11_MODULE(runner_lib_py, m) {
     py::class_<Runner::TestingResult>(runner, "TestingResult")
             .def(py::init<>())
             .def_readwrite("res", &Runner::TestingResult::res)
-            .def_readwrite("output", &Runner::TestingResult::output);
+            .def_readwrite("output", &Runner::TestingResult::output_path);
 
 
     py::class_<Runner::Limits>(runner, "Limits", py::dynamic_attr())
