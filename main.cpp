@@ -22,5 +22,6 @@ int main() {
             cout << "TL" << endl;
             break;
     }
+    
     cout << "OUT:" << runner.GetOutput().output_path << endl;
 }

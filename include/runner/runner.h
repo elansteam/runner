@@ -137,8 +137,9 @@ namespace elans {
 
                 slave_pid_ = fork();
                 if (slave_pid_) {
-                    SetUpCgroups(lims.memory);
+                    InitCgroups(lims.memory);
                     PtraceProcess(input, lims.time);
+                    DeinitCgroups();
                 } else {
                     SetUpSlave(path);
                 }
@@ -233,13 +234,13 @@ namespace elans {
                 }
             }
 
-            void Write(std::string path, std::string data) {
+            static void Write(std::string path, std::string data) {
                 int fd = open(path.data(), O_WRONLY | O_TRUNC);
                 write(fd, data.data(), data.size());
                 close(fd);
             }
 
-            std::string Read(std::string path) {
+            static std::string Read(std::string path) {
                 int fd = open(path.data(), O_RDONLY);
                 std::string s;
                 std::string buf(1024, 0);
@@ -257,10 +258,14 @@ namespace elans {
                 return s;
             }
 
-            void SetUpCgroups(uint64_t memory_limit) {
+            void InitCgroups(uint64_t memory_limit) const {
                 std::filesystem::create_directory("/sys/fs/cgroup/group" + std::to_string(runner_number_));
                 Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/cgroup.procs", std::to_string(slave_pid_));
                 Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.max", std::to_string(memory_limit * 1024));
+            }
+
+            void DeinitCgroups() const {
+                std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(runner_number_));
             }
 
             uint16_t GetRunnerNumber() const {
