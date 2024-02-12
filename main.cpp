@@ -1,3 +1,5 @@
+#pragma GCC optimize("O3,unroll-loops")
+
 #include <iostream>
 #include "runner/runner.h"
 
@@ -22,6 +24,9 @@ int main() {
             cout << "TL" << endl;
             break;
     }
-    
+
     cout << "OUT:" << runner.GetOutput().output_path << endl;
+    std::ifstream in(runner.GetOutput().output_path);
+    char buf[1024];
+    cout.write(buf, in.readsome(buf, 1024));
 }

@@ -120,6 +120,7 @@ namespace elans {
                 uint64_t threads;
                 uint64_t memory; // kb
                 uint64_t time;// ms
+                bool files; // can user write to of read from files
             };
 
             struct TestingResult {
@@ -130,15 +131,17 @@ namespace elans {
             Runner(const std::string &path, const std::string &input, Limits lims) {
                 runner_number_ = GetRunnerNumber();
 
+                std::filesystem::create_directory("/tmp/runner");
                 std::string input_path = "/tmp/runner/input" + std::to_string(runner_number_);
-                program_input_ = open(input_path.data(), O_RDWR);
+                program_input_ = open(input_path.data(), O_RDWR | O_CREAT);
+                assert(program_input_ != -1);
                 std::string output_path = "/tmp/runner/output" + std::to_string(runner_number_);
-                program_output_ = open(output_path.data(), O_RDWR);
+                program_output_ = open(output_path.data(), O_RDWR | O_CREAT);
 
                 slave_pid_ = fork();
                 if (slave_pid_) {
                     InitCgroups(lims.memory);
-                    PtraceProcess(input, lims.time);
+                    PtraceProcess(input, lims);
                     DeinitCgroups();
                 } else {
                     SetUpSlave(path);
@@ -158,6 +161,8 @@ namespace elans {
                 ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
                 dup2(program_input_, STDIN_FILENO);
                 dup2(program_output_, STDOUT_FILENO);
+                close(program_input_);
+                close(program_output_);
                 execl(path.data(), "", nullptr);
                 throw CantOpenExecutable(path);
             }
@@ -170,12 +175,12 @@ namespace elans {
                 ptrace(PTRACE_CONT, slave_pid_, 0, 0);
             }
 
-            void PtraceProcess(const std::string &input, uint64_t time_limit) {
-                const auto begin_time = std::chrono::high_resolution_clock::now();
-                const rlimit *lim = new rlimit(time_limit / 1000 + (time_limit % 1000 > 0), time_limit / 1000 + (time_limit % 1000 > 0));
-                prlimit(slave_pid_, RLIMIT_CPU, lim, nullptr);
-
+            void PtraceProcess(const std::string &input, Limits lims) {
                 write(program_input_, input.data(), input.size());
+
+                const rlimit *lim = new rlimit(lims.time / 1000 + 1, lims.time / 1000 + 1);
+                prlimit(slave_pid_, RLIMIT_CPU, lim, nullptr);
+                const auto begin_time = std::chrono::high_resolution_clock::now();
 
                 int status;
                 waitpid(slave_pid_, &status, 0);
@@ -187,24 +192,38 @@ namespace elans {
                     if (WIFSTOPPED(status) && WSTOPSIG(status) & 0x80) {
                         ptrace(PTRACE_GETREGS, slave_pid_, 0, &state);
                         switch (state.orig_rax) {
+                            // rasstrel
                             case __NR_clone:
                             case __NR_fork:
+                            case __NR_execve:
+                            case __NR_ptrace:
+                            case __NR_setgid:
+                            case __NR_setgroups:
                                 KillInSyscall(state);
                                 res_.emplace(RunningResult::SE, "/tmp/runner/output" + std::to_string(runner_number_));
-                                close(program_input_);
-                                close(program_output_);
                                 return;
+                            // files
+                            case __NR_open:
+                            case __NR_mkdir:
+                            case __NR_rmdir:
+                            case __NR_creat:
+                            case __NR_link:
+                            case __NR_symlink:
+                            case __NR_chmod:
+                            case __NR_chown:
+                            case __NR_lchown:
+                            case __NR_umask:
+                                if (lims.files) {
+                                    KillInSyscall(state);
+                                    res_.emplace(RunningResult::SE, "/tmp/runner/output" + std::to_string(runner_number_));
+                                    return;
+                                }
+                                break;
                             case __NR_exit:
                             case __NR_exit_group:
-                                if (state.rdi == 137) {
-                                    goto checking_result;
-                                } else if (state.rdi != 0) {
-                                    if (!res_.has_value()) {
-                                        res_.emplace(RunningResult::RE, "/tmp/runner/output" + std::to_string(runner_number_));
-                                        close(program_input_);
-                                        close(program_output_);
-                                        return;
-                                    }
+                                if (state.rdi != 0 && state.rdi != 137) {
+                                    res_.emplace(RunningResult::RE, "/tmp/runner/output" + std::to_string(runner_number_));
+                                    return;
                                 }
                                 break;
                         }
@@ -212,15 +231,13 @@ namespace elans {
                         waitpid(slave_pid_, &status, 0);
                     }
                 }
-                checking_result:;
-
-                close(program_input_);
-                close(program_output_);
 
                 const auto end_time = std::chrono::high_resolution_clock::now();
-                auto period_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - begin_time);
-                auto time_limit_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(time_limit));
-                if (period_nanos >= time_limit_nanos) {
+                auto period = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - begin_time);
+                std::cout << "Execution time: " << period << std::endl;
+                auto time_limit_millis = std::chrono::milliseconds(lims.time);
+
+                if (period >= time_limit_millis) {
                     res_.emplace(RunningResult::TL, "/tmp/runner/output" + std::to_string(runner_number_));
                     return;
                 }
@@ -265,7 +282,7 @@ namespace elans {
             }
 
             void DeinitCgroups() const {
-                std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(runner_number_));
+                while (!std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(runner_number_))) {}
             }
 
             uint16_t GetRunnerNumber() const {
