@@ -20,7 +20,7 @@ int main() {
         case elans::runner::Runner::RunningResult::SE:
             cout << "SE" << endl;
             break;
-        case elans::runner::Runner::RunningResult::TL_CPU:
+        case elans::runner::Runner::RunningResult::TL:
             cout << "TL" << endl;
             break;
     }

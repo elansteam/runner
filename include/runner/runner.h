@@ -109,8 +109,8 @@ namespace elans {
         class Runner {
         public:
             enum class RunningResult {
-                TL_CPU,
-                TL_RT,
+                TL,
+                IE,
                 ML,
                 OK,
                 RE,
@@ -264,13 +264,13 @@ namespace elans {
                 if (kill(killer_pid, 0)) {
                     kill(killer_pid, SIGKILL);
                 } else {
-                    res_.emplace(RunningResult::TL_RT, "/tmp/runner/output" + std::to_string(runner_number_));
+                    res_.emplace(RunningResult::IE, "/tmp/runner/output" + std::to_string(runner_number_));
                     return;
                 }
 
                 std::cout << "CPU exec time: " << (end_cpu_time.tv_nsec - beg_cpu_time.tv_nsec) / 1e5 << "ms" << std::endl;
                 if ((end_cpu_time.tv_nsec - beg_cpu_time.tv_nsec) / 1e5 > lims.tl_cpu_time) {
-                    res_.emplace(RunningResult::TL_CPU, "/tmp/runner/output" + std::to_string(runner_number_));
+                    res_.emplace(RunningResult::TL, "/tmp/runner/output" + std::to_string(runner_number_));
                     return;
                 }
 

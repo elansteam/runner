@@ -27,7 +27,7 @@ PYBIND11_MODULE(runner_lib_py, m) {
 
 
     py::enum_<Runner::RunningResult>(runner, "ExitStatus")
-            .value("TL", Runner::RunningResult::TL_CPU)
+            .value("TL", Runner::RunningResult::TL)
             .value("ML", Runner::RunningResult::ML)
             .value("OK", Runner::RunningResult::OK)
             .value("SE", Runner::RunningResult::SE)
