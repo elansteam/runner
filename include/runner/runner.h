@@ -109,7 +109,8 @@ namespace elans {
         class Runner {
         public:
             enum class RunningResult {
-                TL,
+                TL_CPU,
+                TL_RT,
                 ML,
                 OK,
                 RE,
@@ -119,7 +120,8 @@ namespace elans {
             struct Limits {
                 uint64_t threads;
                 uint64_t memory; // kb
-                uint64_t time;// ms
+                uint64_t tl_cpu_time; // ms
+                uint64_t tl_real_time; // ms
                 bool files; // can user write to of read from files
             };
 
@@ -176,11 +178,25 @@ namespace elans {
                 ptrace(PTRACE_CONT, slave_pid_, 0, 0);
             }
 
+            pid_t RunKiller(pid_t slave, uint64_t millis_limit) {
+                pid_t killer_pid = fork();
+                if (killer_pid) {
+                    return killer_pid;
+                } else {
+                    timespec ts(0, millis_limit * 100'000);
+                    nanosleep(&ts, &ts);
+                    kill(slave, SIGKILL);
+                    exit(EXIT_SUCCESS);
+                }
+            }
+
             void PtraceProcess(const std::string &input, Limits lims) {
                 write(program_input_, input.data(), input.size());
 
-                const rlimit *lim = new rlimit(lims.time / 1000 + 1, lims.time / 1000 + 1);
-                prlimit(slave_pid_, RLIMIT_CPU, lim, nullptr);
+                rlimit lim(lims.tl_cpu_time / 1000 + 1, lims.tl_cpu_time / 1000 + 1);
+                prlimit(slave_pid_, RLIMIT_CPU, &lim, nullptr);
+                pid_t killer_pid = RunKiller(slave_pid_, lims.tl_real_time);
+
 
                 clockid_t slave_clock_id;
                 clock_getcpuclockid(slave_pid_, &slave_clock_id);
@@ -245,9 +261,16 @@ namespace elans {
                 // auto period = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - begin_time);
                 // std::cout << "Execution time: " << period << std::endl;
                 // auto time_limit_millis = std::chrono::milliseconds(lims.time);
+                if (kill(killer_pid, 0)) {
+                    kill(killer_pid, SIGKILL);
+                } else {
+                    res_.emplace(RunningResult::TL_RT, "/tmp/runner/output" + std::to_string(runner_number_));
+                    return;
+                }
+
                 std::cout << "CPU exec time: " << (end_cpu_time.tv_nsec - beg_cpu_time.tv_nsec) / 1e5 << "ms" << std::endl;
-                if ((end_cpu_time.tv_nsec - beg_cpu_time.tv_nsec) / 1e5 > lims.time) {
-                    res_.emplace(RunningResult::TL, "/tmp/runner/output" + std::to_string(runner_number_));
+                if ((end_cpu_time.tv_nsec - beg_cpu_time.tv_nsec) / 1e5 > lims.tl_cpu_time) {
+                    res_.emplace(RunningResult::TL_CPU, "/tmp/runner/output" + std::to_string(runner_number_));
                     return;
                 }
 

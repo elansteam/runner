@@ -23,11 +23,11 @@ PYBIND11_MODULE(runner_lib_py, m) {
             .def(py::init<>())
             .def_readwrite("threads", &Runner::Limits::threads)
             .def_readwrite("memory", &Runner::Limits::memory)
-            .def_readwrite("time", &Runner::Limits::time);
+            .def_readwrite("time", &Runner::Limits::tl_cpu_time);
 
 
     py::enum_<Runner::RunningResult>(runner, "ExitStatus")
-            .value("TL", Runner::RunningResult::TL)
+            .value("TL", Runner::RunningResult::TL_CPU)
             .value("ML", Runner::RunningResult::ML)
             .value("OK", Runner::RunningResult::OK)
             .value("SE", Runner::RunningResult::SE)

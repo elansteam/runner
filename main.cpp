@@ -6,7 +6,7 @@
 using namespace std;
 
 int main() {
-    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a", "13\n", elans::runner::Runner::Limits{ .threads = 20ll, .memory = 1024, .time = 1'000 });
+    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a", "13\n", elans::runner::Runner::Limits{ .threads = 20ll, .memory = 1024, .tl_cpu_time = 1'000 });
     switch (runner.GetOutput().res) {
         case elans::runner::Runner::RunningResult::RE:
             cout << "RE" << endl;
@@ -20,7 +20,7 @@ int main() {
         case elans::runner::Runner::RunningResult::SE:
             cout << "SE" << endl;
             break;
-        case elans::runner::Runner::RunningResult::TL:
+        case elans::runner::Runner::RunningResult::TL_CPU:
             cout << "TL" << endl;
             break;
     }
