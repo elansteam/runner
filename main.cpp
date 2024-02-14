@@ -1,4 +1,4 @@
-#pragma GCC optimize("O3")
+// #pragma GCC optimize("O3")
 
 #include <iostream>
 #include "runner/runner.h"
@@ -6,7 +6,7 @@
 using namespace std;
 
 int main() {
-    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a", "13\n", elans::runner::Runner::Limits{ .threads = 20ll, .memory = 1024, .tl_cpu_time = 1'000 });
+    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a", "13\n", elans::runner::Runner::Limits{ .threads = 20ll, .memory = 1024, .tl_cpu_time = 1'000, .tl_real_time = 3'000 });
     switch (runner.GetOutput().res) {
         case elans::runner::Runner::RunningResult::RE:
             cout << "RE" << endl;
@@ -19,9 +19,12 @@ int main() {
             break;
         case elans::runner::Runner::RunningResult::SE:
             cout << "SE" << endl;
-            break;
+        break;
         case elans::runner::Runner::RunningResult::TL:
             cout << "TL" << endl;
+            break;
+        case elans::runner::Runner::RunningResult::IE:
+            cout << "IE" << endl;
             break;
     }
 

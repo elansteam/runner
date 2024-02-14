@@ -183,9 +183,9 @@ namespace elans {
                 if (killer_pid) {
                     return killer_pid;
                 } else {
-                    timespec ts(0, millis_limit * 100'000);
-                    nanosleep(&ts, &ts);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(millis_limit));
                     kill(slave, SIGKILL);
+                    std::cout << "I love killing" << std::endl;
                     exit(EXIT_SUCCESS);
                 }
             }
@@ -194,17 +194,9 @@ namespace elans {
                 write(program_input_, input.data(), input.size());
 
                 rlimit lim(lims.tl_cpu_time / 1000 + 1, lims.tl_cpu_time / 1000 + 1);
-                prlimit(slave_pid_, RLIMIT_CPU, &lim, nullptr);
                 pid_t killer_pid = RunKiller(slave_pid_, lims.tl_real_time);
-
-
-                clockid_t slave_clock_id;
-                clock_getcpuclockid(slave_pid_, &slave_clock_id);
-                timespec beg_cpu_time, end_cpu_time;
-                clock_gettime(slave_clock_id, &beg_cpu_time);
-
-                // const auto begin_time = std::chrono::high_resolution_clock::now();
-
+                prlimit(slave_pid_, RLIMIT_CPU, &lim, nullptr);
+                uint64_t cpu_time_ejudge_beg = GetCPUTime(slave_pid_), cpu_time_ejudge_end;
 
                 int status;
                 waitpid(slave_pid_, &status, 0);
@@ -249,7 +241,7 @@ namespace elans {
                                     res_.emplace(RunningResult::RE, "/tmp/runner/output" + std::to_string(runner_number_));
                                     return;
                                 }
-                                clock_gettime(slave_clock_id, &end_cpu_time);
+                                cpu_time_ejudge_end = GetCPUTime(slave_pid_);
                                 break;
                         }
                         ptrace(PTRACE_SYSCALL, slave_pid_, 0, 0);
@@ -257,19 +249,15 @@ namespace elans {
                     }
                 }
 
-                // const auto end_time = std::chrono::high_resolution_clock::now();
-                // auto period = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - begin_time);
-                // std::cout << "Execution time: " << period << std::endl;
-                // auto time_limit_millis = std::chrono::milliseconds(lims.time);
-                if (kill(killer_pid, 0)) {
+                std::cout << "CPU exec time(ejudge): " << (cpu_time_ejudge_end - cpu_time_ejudge_beg) * 1'000 / sysconf(_SC_CLK_TCK) << "ms" << std::endl;
+                if (kill(killer_pid, 0) == 0) {
                     kill(killer_pid, SIGKILL);
                 } else {
                     res_.emplace(RunningResult::IE, "/tmp/runner/output" + std::to_string(runner_number_));
                     return;
                 }
 
-                std::cout << "CPU exec time: " << (end_cpu_time.tv_nsec - beg_cpu_time.tv_nsec) / 1e5 << "ms" << std::endl;
-                if ((end_cpu_time.tv_nsec - beg_cpu_time.tv_nsec) / 1e5 > lims.tl_cpu_time) {
+                if ((cpu_time_ejudge_end - cpu_time_ejudge_beg) * 1'000 / sysconf(_SC_CLK_TCK) > lims.tl_cpu_time) {
                     res_.emplace(RunningResult::TL, "/tmp/runner/output" + std::to_string(runner_number_));
                     return;
                 }
@@ -305,6 +293,17 @@ namespace elans {
                 }
                 close(fd);
                 return s;
+            }
+
+            static uint64_t GetCPUTime(pid_t pid) {
+                std::ifstream fin("/proc/" + std::to_string(pid) + "/stat");
+                for (int i = 0; i < 13; ++i) {
+                    std::string trash;
+                    fin >> trash;
+                }
+                uint64_t utime, stime;
+                fin >> utime >> stime;
+                return utime + stime;
             }
 
             void InitCgroups(uint64_t memory_limit) const {
