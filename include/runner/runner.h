@@ -10,6 +10,12 @@
 
 #include <bits/stdc++.h>
 #include <fcntl.h>
+constexpr int TL_EXIT_CODE = 132;
+
+void SignalHandler(int sig) {
+    assert(sig == SIGXCPU);
+    exit(TL_EXIT_CODE);
+}
 
 namespace elans {
     namespace runner {
@@ -57,6 +63,15 @@ namespace elans {
                 ptr_ = other.ptr_;
                 cur_amount_of_objs_ = other.cur_amount_of_objs_;
                 ++*cur_amount_of_objs_;
+                return *this;
+            }
+
+            SharedMem &operator=(const T &rhs) {
+                if (*inialized_) {
+                    ptr_->~T();
+                }
+                new (ptr_) T(rhs);
+                *inialized_ = true;
                 return *this;
             }
 
@@ -108,46 +123,51 @@ namespace elans {
 
         class Runner {
         public:
+            static constexpr int TL_EXIT_CODE = 132;
+
             enum class RunningResult {
-                TL,
-                IE,
-                ML,
-                OK,
-                RE,
-                SE
+                TL = 0,
+                IE = 1,
+                ML = 2,
+                OK = 3,
+                RE = 4,
+                SE = 5
             };
 
             struct Limits {
                 uint64_t threads;
                 uint64_t memory; // kb
-                uint64_t tl_cpu_time; // ms
-                uint64_t tl_real_time; // ms
-                bool files; // can user write to of read from files
+                uint64_t cpu_time_limit; // ms
+                uint64_t real_time_limit; // ms
+                bool allow_files_write;
+                bool allow_files_read;
+                std::string input_stream_file;
+                std::string output_stream_file;
             };
 
             struct TestingResult {
-                RunningResult res;
-                std::string output_path;
+                RunningResult verdict;
+                int exit_code;
+                uint16_t threads;
+                uint64_t cpu_time; // ms
+                uint64_t real_time; // ms
+                uint64_t memory; // bytes
             };
 
-            Runner(const std::string &path, const std::string &input, Limits lims) {
+            Runner(const std::string &path, Limits lims) {
                 runner_number_ = GetRunnerNumber();
-
-                std::filesystem::create_directory("/tmp/runner");
-                std::string input_path = "/tmp/runner/input" + std::to_string(runner_number_);
-                program_input_ = open(input_path.data(), O_RDWR | O_CREAT);
-                assert(program_input_ != -1);
-                std::string output_path = "/tmp/runner/output" + std::to_string(runner_number_);
-                program_output_ = open(output_path.data(), O_RDWR | O_CREAT);
 
                 slave_pid_ = fork();
                 if (slave_pid_) {
                     InitCgroups(lims.memory);
-                    PtraceProcess(input, lims);
-                    DeinitCgroups();
+                    PtraceProcess(lims);
                 } else {
-                    SetUpSlave(path);
+                    SetUpSlave(path, lims);
                 }
+            }
+
+            ~Runner() {
+                DeinitCgroups();
             }
 
             TestingResult GetOutput() {
@@ -155,17 +175,20 @@ namespace elans {
             }
             
         private:
-            int program_input_, program_output_;
             SharedMem<TestingResult> res_;
             pid_t slave_pid_;
             uint32_t runner_number_;
 
-            void SetUpSlave(const std::string &path) {
+            void SetUpSlave(const std::string &path, Limits lims) {
+                int output = open(lims.output_stream_file.data(), O_RDWR | O_CREAT);
+                int input = open(lims.output_stream_file.data(), O_RDWR | O_CREAT);
+                dup2(input, STDIN_FILENO);
+                dup2(output, STDOUT_FILENO);
+                close(input);
+                close(output);
+                signal(SIGXCPU, SigHandler);
+
                 ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
-                dup2(program_input_, STDIN_FILENO);
-                dup2(program_output_, STDOUT_FILENO);
-                close(program_input_);
-                close(program_output_);
                 execl(path.data(), "", nullptr);
                 throw CantOpenExecutable(path);
             }
@@ -185,18 +208,18 @@ namespace elans {
                 } else {
                     std::this_thread::sleep_for(std::chrono::milliseconds(millis_limit));
                     kill(slave, SIGKILL);
-                    std::cout << "I love killing" << std::endl;
                     exit(EXIT_SUCCESS);
                 }
             }
 
-            void PtraceProcess(const std::string &input, Limits lims) {
-                write(program_input_, input.data(), input.size());
+            void PtraceProcess(Limits lims) {
+                rlimit lim(lims.cpu_time_limit / 1000 + 1, RLIM_INFINITY);
 
-                rlimit lim(lims.tl_cpu_time / 1000 + 1, lims.tl_cpu_time / 1000 + 1);
-                pid_t killer_pid = RunKiller(slave_pid_, lims.tl_real_time);
+                pid_t killer_pid = RunKiller(slave_pid_, lims.real_time_limit);
                 prlimit(slave_pid_, RLIMIT_CPU, &lim, nullptr);
-                uint64_t cpu_time_ejudge_beg = GetCPUTime(slave_pid_), cpu_time_ejudge_end;
+                uint64_t cpu_time_ejudge_beg = GetCPUTime(slave_pid_);
+                auto beg_real_time = std::chrono::high_resolution_clock::now();
+                uint64_t cpu_time_ejudge_end;
 
                 int status;
                 waitpid(slave_pid_, &status, 0);
@@ -215,11 +238,18 @@ namespace elans {
                             case __NR_ptrace:
                             case __NR_setgid:
                             case __NR_setgroups:
+                            case __NR_signalfd:
+                            case __NR_sigaltstack:
+                                kill(killer_pid, SIGKILL);
                                 KillInSyscall(state);
-                                res_.emplace(RunningResult::SE, "/tmp/runner/output" + std::to_string(runner_number_));
+                                res_ = TestingResult{   .verdict = RunningResult::SE,
+                                                        .exit_code =  0,
+                                                        .threads = 1,
+                                                        .cpu_time = GetCPUTime(slave_pid_) - cpu_time_ejudge_beg,
+                                                        .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
+                                                        .memory = GetMaxMemoryCgroup()
+                                                    };
                                 return;
-                            // files
-                            case __NR_open:
                             case __NR_mkdir:
                             case __NR_rmdir:
                             case __NR_creat:
@@ -229,19 +259,35 @@ namespace elans {
                             case __NR_chown:
                             case __NR_lchown:
                             case __NR_umask:
-                                if (lims.files) {
+                                if (!lims.allow_files_write) {
+                                    kill(killer_pid, SIGKILL);
                                     KillInSyscall(state);
-                                    res_.emplace(RunningResult::SE, "/tmp/runner/output" + std::to_string(runner_number_));
+                                    res_ = TestingResult{   .verdict = RunningResult::SE,
+                                                            .exit_code =  0,
+                                                            .threads = 1,
+                                                            .cpu_time = GetCPUTime(slave_pid_) - cpu_time_ejudge_beg,
+                                                            .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
+                                                            .memory = GetMaxMemoryCgroup()
+                                                        };
                                     return;
                                 }
                                 break;
                             case __NR_exit:
                             case __NR_exit_group:
-                                if (state.rdi != 0 && state.rdi != 137) {
-                                    res_.emplace(RunningResult::RE, "/tmp/runner/output" + std::to_string(runner_number_));
-                                    return;
-                                }
                                 cpu_time_ejudge_end = GetCPUTime(slave_pid_);
+                                if (state.rdi != 0 && state.rdi != 137) {
+                                    kill(killer_pid, SIGKILL);
+                                    res_ = TestingResult{   .verdict = RunningResult::RE,
+                                                            .exit_code =  (int)state.rdi,
+                                                            .threads = 1,
+                                                            .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
+                                                            .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
+                                                            .memory = GetMaxMemoryCgroup()
+                                                        };
+                                    return;
+                                } else if (state.rdi == 137) {
+                                    throw std::runtime_error("IT CAN HAPPEN!!!");
+                                }
                                 break;
                         }
                         ptrace(PTRACE_SYSCALL, slave_pid_, 0, 0);
@@ -249,25 +295,49 @@ namespace elans {
                     }
                 }
 
-                std::cout << "CPU exec time(ejudge): " << (cpu_time_ejudge_end - cpu_time_ejudge_beg) * 1'000 / sysconf(_SC_CLK_TCK) << "ms" << std::endl;
                 if (kill(killer_pid, 0) == 0) {
                     kill(killer_pid, SIGKILL);
                 } else {
-                    res_.emplace(RunningResult::IE, "/tmp/runner/output" + std::to_string(runner_number_));
+                    res_ = TestingResult{   .verdict = RunningResult::IE,
+                                            .exit_code =  0,
+                                            .threads = 1,
+                                            .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
+                                            .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
+                                            .memory = GetMaxMemoryCgroup()
+                                        };
                     return;
                 }
 
-                if ((cpu_time_ejudge_end - cpu_time_ejudge_beg) * 1'000 / sysconf(_SC_CLK_TCK) > lims.tl_cpu_time) {
-                    res_.emplace(RunningResult::TL, "/tmp/runner/output" + std::to_string(runner_number_));
+                if (cpu_time_ejudge_end - cpu_time_ejudge_beg > lims.cpu_time_limit) {
+                    res_ = TestingResult{   .verdict = RunningResult::TL,
+                                            .exit_code =  0,
+                                            .threads = 1,
+                                            .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
+                                            .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
+                                            .memory = GetMaxMemoryCgroup()
+                                        };
                     return;
                 }
 
                 if (WIFSIGNALED(status)) {
-                    res_.emplace(RunningResult::ML, "/tmp/runner/output" + std::to_string(runner_number_));
+                    res_ = TestingResult{   .verdict = RunningResult::ML,
+                                            .exit_code =  0,
+                                            .threads = 1,
+                                            .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
+                                            .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
+                                            .memory = GetMaxMemoryCgroup()
+                                        };
+                    return;
                 }
 
                 if (!res_.has_value()) {
-                    res_.emplace(RunningResult::OK, "/tmp/runner/output" + std::to_string(runner_number_));
+                    res_ = TestingResult{   .verdict = RunningResult::OK,
+                                            .exit_code =  0,
+                                            .threads = 1,
+                                            .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
+                                            .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
+                                            .memory = GetMaxMemoryCgroup()
+                                        };
                 }
             }
 
@@ -295,6 +365,10 @@ namespace elans {
                 return s;
             }
 
+            static void SigHandler(int) {
+                exit(52);
+            }
+
             static uint64_t GetCPUTime(pid_t pid) {
                 std::ifstream fin("/proc/" + std::to_string(pid) + "/stat");
                 for (int i = 0; i < 13; ++i) {
@@ -303,7 +377,7 @@ namespace elans {
                 }
                 uint64_t utime, stime;
                 fin >> utime >> stime;
-                return utime + stime;
+                return (utime + stime) * 1'000 / sysconf(_SC_CLK_TCK);
             }
 
             void InitCgroups(uint64_t memory_limit) const {
@@ -312,17 +386,21 @@ namespace elans {
                 Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.max", std::to_string(memory_limit * 1024));
             }
 
+            uint64_t GetMaxMemoryCgroup() const {
+                std::ifstream fin("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.peak");
+                uint64_t ans;
+                fin >> ans;
+                return ans;
+            }
+
             void DeinitCgroups() const {
-                while (!std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(runner_number_))) {}
+                assert(std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(runner_number_)));
             }
 
             uint16_t GetRunnerNumber() const {
-                static const std::string path_to_runner_num = "/tmp/runner/runner_num";
-                std::fstream finout(path_to_runner_num, std::ios::in | std::ios::out | std::ios::trunc);
-                uint16_t ans;
-                finout >> ans;
-                finout << ans + 1;
-                return ans;
+                static std::random_device rd;
+                static std::mt19937 gen(rd());
+                return gen();
             }
         };
     } // namespace runner
