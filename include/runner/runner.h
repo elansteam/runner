@@ -45,6 +45,7 @@ namespace elans {
                 bool allow_files_read;
                 std::string input_stream_file;
                 std::string output_stream_file;
+                std::vector<std::string> args;
             };
 
             struct TestingResult {
@@ -81,17 +82,20 @@ namespace elans {
             pid_t slave_pid_;
             uint32_t runner_number_;
 
-            void SetUpSlave(const std::string &path, Limits lims) {
-                int output = open(lims.output_stream_file.data(), O_RDWR);
-                int input = open(lims.output_stream_file.data(), O_RDWR);
+            void SetUpSlave(std::string path, Limits lims) {
+                int input = open(lims.input_stream_file.data(), O_RDONLY);
+                int output = open(lims.output_stream_file.data(), O_WRONLY);
                 dup2(input, STDIN_FILENO);
                 dup2(output, STDOUT_FILENO);
                 close(input);
                 close(output);
                 signal(SIGXCPU, SigHandler);
 
+                std::vector<char*> args_ptrs(lims.args.size());
+                std::transform(lims.args.begin(), lims.args.end(), args_ptrs.begin(), [] (std::string &s) { return s.data(); });
+
                 ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
-                execl(path.data(), "", nullptr);
+                execve(path.data(), args_ptrs.data(), nullptr);
                 throw CantOpenExecutable(path);
             }
 
@@ -178,7 +182,6 @@ namespace elans {
                             case __NR_exit_group:
                                 cpu_time_ejudge_end = GetCPUTime(slave_pid_);
                                 if (state.rdi != 0 && state.rdi != 137) {
-                                    kill(killer_pid, SIGKILL);
                                     res_ = TestingResult{   .verdict = RunningResult::RE,
                                                             .exit_code =  (int)state.rdi,
                                                             .threads = 1,
@@ -186,7 +189,6 @@ namespace elans {
                                                             .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
                                                             .memory = GetMaxMemoryCgroup()
                                                         };
-                                    return;
                                 } else if (state.rdi == 137) {
                                     throw std::runtime_error("IT CAN HAPPEN!!!");
                                 }
@@ -210,7 +212,7 @@ namespace elans {
                     return;
                 }
 
-                if (GetMaxMemoryCgroup() >= lims.memory) {
+                if (!res_.has_value() && GetMaxMemoryCgroup() >= lims.memory * 1024) {
                     res_ = TestingResult{   .verdict = RunningResult::ML,
                                             .exit_code =  0,
                                             .threads = 1,
@@ -221,7 +223,7 @@ namespace elans {
                     return;
                 }
 
-                if (cpu_time_ejudge_end - cpu_time_ejudge_beg > lims.cpu_time_limit) {
+                if (!res_.has_value() && cpu_time_ejudge_end - cpu_time_ejudge_beg > lims.cpu_time_limit) {
                     res_ = TestingResult{   .verdict = RunningResult::TL,
                                             .exit_code =  0,
                                             .threads = 1,
@@ -296,7 +298,12 @@ namespace elans {
             }
 
             void DeinitCgroups() const {
-                assert(std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(runner_number_)));
+                while (true) {
+                    try {
+                        std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(runner_number_));
+                        break;
+                    } catch(...) {}
+                }
             }
 
             uint16_t GetRunnerNumber() const {
