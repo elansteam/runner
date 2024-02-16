@@ -28,7 +28,8 @@ elans::runner::Runner::TestingResult elans::runner::Runner::GetOutput() {
 
 void elans::runner::Runner::SetUpSlave(std::string path, elans::runner::Runner::Limits lims) {
     int input = open(lims.input_stream_file.data(), O_RDONLY);
-    int output = open(lims.output_stream_file.data(), O_WRONLY);
+    int output = open(lims.output_stream_file.data(), O_WRONLY | O_TRUNC);
+    ftruncate(output, 1'000'000);
     dup2(input, STDIN_FILENO);
     dup2(output, STDOUT_FILENO);
     close(input);
@@ -63,14 +64,16 @@ pid_t elans::runner::Runner::RunKiller(pid_t slave, uint64_t millis_limit) {
 void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
     rlimit lim(lims.cpu_time_limit / 1000 + 1, RLIM_INFINITY);
 
-    pid_t killer_pid = RunKiller(slave_pid_, lims.real_time_limit);
-    prlimit(slave_pid_, RLIMIT_CPU, &lim, nullptr);
-    uint64_t cpu_time_ejudge_beg = GetCPUTime(slave_pid_);
-    auto beg_real_time = std::chrono::high_resolution_clock::now();
     uint64_t cpu_time_ejudge_end;
 
     int status;
     waitpid(slave_pid_, &status, 0);
+
+    pid_t killer_pid = RunKiller(slave_pid_, lims.real_time_limit);
+    prlimit(slave_pid_, RLIMIT_CPU, &lim, nullptr);
+    uint64_t cpu_time_ejudge_beg = GetCPUTime(slave_pid_);
+    auto beg_real_time = std::chrono::high_resolution_clock::now();
+
     ptrace(PTRACE_SETOPTIONS, slave_pid_, 0, PTRACE_O_TRACESYSGOOD);
     while (!WIFEXITED(status) && !WIFSIGNALED(status)) {
         user_regs_struct state{};
