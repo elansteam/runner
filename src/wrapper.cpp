@@ -32,7 +32,8 @@ PYBIND11_MODULE(runner_lib_py, m) {
             .def_readwrite("allow_files_read", &Runner::Limits::allow_files_read)
             .def_readwrite("allow_files_write", &Runner::Limits::allow_files_write)
             .def_readwrite("input_stream_file", &Runner::Limits::input_stream_file)
-            .def_readwrite("output_stream_file", &Runner::Limits::output_stream_file);
+            .def_readwrite("output_stream_file", &Runner::Limits::output_stream_file)
+            .def_readwrite("args", &Runner::Limits::args);
 
 
     py::enum_<Runner::RunningResult>(runner, "ExitStatus")
