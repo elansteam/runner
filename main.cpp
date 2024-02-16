@@ -14,8 +14,9 @@ int main() {
             .cpu_time_limit = 3'000,
             .real_time_limit = 5'000,
             .input_stream_file = "/home/pablo/Documents/project/runner/input.txt",
-            .output_stream_file = "/home/pablo/Documents/project/runner/outpup.txt",
-            .args = { "/usr/bin/ls" } });
+            .output_stream_file = "/home/pablo/Documents/project/runner/outpup.txt"
+            });
+
     switch (runner.GetOutput().verdict) {
         case elans::runner::Runner::RunningResult::RE:
             cout << "RE" << endl;
@@ -28,7 +29,7 @@ int main() {
             break;
         case elans::runner::Runner::RunningResult::SE:
             cout << "SE" << endl;
-        break;
+            break;
         case elans::runner::Runner::RunningResult::TL:
             cout << "TL" << endl;
             break;

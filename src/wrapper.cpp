@@ -9,9 +9,15 @@ PYBIND11_MODULE(runner_lib_py, m) {
 
 
     py::class_<Runner> runner(m, "Runner");
-    runner
-        .def(py::init<std::string, Runner::Limits>())
-            .def("GetOutput", &Runner::GetOutput);
+
+    py::enum_<Runner::RunningResult>(runner, "ExitStatus")
+            .value("TL", Runner::RunningResult::TL)
+            .value("ML", Runner::RunningResult::ML)
+            .value("OK", Runner::RunningResult::OK)
+            .value("SE", Runner::RunningResult::SE)
+            .value("RE", Runner::RunningResult::RE)
+            .value("IE", Runner::RunningResult::IE)
+            .export_values();
 
     py::class_<Runner::TestingResult>(runner, "TestingResult")
             .def(py::init<>())
@@ -22,7 +28,6 @@ PYBIND11_MODULE(runner_lib_py, m) {
             .def_readwrite("real_time", &Runner::TestingResult::real_time)
             .def_readwrite("memory", &Runner::TestingResult::memory);
 
-
     py::class_<Runner::Limits>(runner, "Limits", py::dynamic_attr())
             .def(py::init<>())
             .def_readwrite("threads", &Runner::Limits::threads)
@@ -32,16 +37,9 @@ PYBIND11_MODULE(runner_lib_py, m) {
             .def_readwrite("allow_files_read", &Runner::Limits::allow_files_read)
             .def_readwrite("allow_files_write", &Runner::Limits::allow_files_write)
             .def_readwrite("input_stream_file", &Runner::Limits::input_stream_file)
-            .def_readwrite("output_stream_file", &Runner::Limits::output_stream_file)
-            .def_readwrite("args", &Runner::Limits::args);
+            .def_readwrite("output_stream_file", &Runner::Limits::output_stream_file);
 
-
-    py::enum_<Runner::RunningResult>(runner, "ExitStatus")
-            .value("TL", Runner::RunningResult::TL)
-            .value("ML", Runner::RunningResult::ML)
-            .value("OK", Runner::RunningResult::OK)
-            .value("SE", Runner::RunningResult::SE)
-            .value("RE", Runner::RunningResult::RE)
-            .value("IE", Runner::RunningResult::IE)
-            .export_values();
+    runner
+        .def(py::init<std::string, Runner::Limits>())
+        .def("GetOutput", &Runner::GetOutput);
 }
