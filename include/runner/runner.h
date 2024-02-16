@@ -22,104 +22,6 @@ namespace elans {
         struct CantOpenExecutable : public std::runtime_error {
             using std::runtime_error::runtime_error;
         };
-        template<typename T>
-        class SharedMem {
-        public:
-            SharedMem()
-                    : inialized_((bool*)mmap(nullptr, sizeof(bool), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0))
-                    , ptr_((T*)mmap(nullptr, sizeof(T), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0))
-                    , cur_amount_of_objs_((int*)mmap(nullptr, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0))
-            {
-                *inialized_ = false;
-                *cur_amount_of_objs_ = 1;
-            }
-
-            SharedMem(const SharedMem<T> &other)
-                    : inialized_(other.inialized_)
-                    , ptr_(other.ptr_)
-                    , cur_amount_of_objs_(other.cur_amount_of_objs_)
-            {
-                ++*cur_amount_of_objs_;
-            }
-
-            ~SharedMem() {
-                --*cur_amount_of_objs_;
-                if (*cur_amount_of_objs_ == 0) {
-                    munmap(inialized_, sizeof(bool));
-                    munmap(ptr_, sizeof(T));
-                    munmap(cur_amount_of_objs_, sizeof(int));
-                }
-            }
-
-            SharedMem &operator=(const SharedMem &other) {
-                if (&other == this) return *this;
-                --*cur_amount_of_objs_;
-                if (*cur_amount_of_objs_ == 0) {
-                    munmap(inialized_, sizeof(bool));
-                    munmap(ptr_, sizeof(T));
-                    munmap(cur_amount_of_objs_, sizeof(int));
-                }
-                inialized_ = other.inialized_;
-                ptr_ = other.ptr_;
-                cur_amount_of_objs_ = other.cur_amount_of_objs_;
-                ++*cur_amount_of_objs_;
-                return *this;
-            }
-
-            SharedMem &operator=(const T &rhs) {
-                if (*inialized_) {
-                    ptr_->~T();
-                }
-                new (ptr_) T(rhs);
-                *inialized_ = true;
-                return *this;
-            }
-
-            T &operator*() {
-                if (!*inialized_) {
-                    throw std::runtime_error("operator* for nullptr");
-                }
-                return *ptr_;
-            }
-
-            const T &operator*() const {
-                if (!*inialized_) {
-                    throw std::runtime_error("operator* for nullptr");
-                }
-                return *ptr_;
-            }
-
-            T *operator->() {
-                if (!*inialized_) {
-                    throw std::runtime_error("operator-> for nullptr");
-                }
-                return ptr_;
-            }
-
-            const T *operator->() const {
-                if (!*inialized_) {
-                    throw std::runtime_error("operator-> for nullptr");
-                }
-                return ptr_;
-            }
-
-            template<typename... ArgsT>
-            void emplace(ArgsT... args) {
-                if (*inialized_) {
-                    ptr_->~T();
-                }
-                new (ptr_) T(args...);
-                *inialized_ = true;
-            }
-
-            bool has_value() const {
-                return *inialized_;
-            }
-        private:
-            bool *inialized_;
-            T *ptr_;
-            int *cur_amount_of_objs_;
-        };
 
         class Runner {
         public:
@@ -175,7 +77,7 @@ namespace elans {
             }
             
         private:
-            SharedMem<TestingResult> res_;
+            std::optional<TestingResult> res_;
             pid_t slave_pid_;
             uint32_t runner_number_;
 

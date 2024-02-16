@@ -1,4 +1,4 @@
-// #pragma GCC optimize("O3")
+// #pragma GCC optimize(s"O3")
 
 #include <iostream>
 #include "runner/runner.h"
