@@ -6,8 +6,8 @@
 using namespace std;
 
 int main() {
-    fork();fork();fork();fork();//fork();
-    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a", elans::runner::Runner::Limits{ .threads = 20ll, .memory = 1024, .cpu_time_limit = 3'000, .real_time_limit = 5'000 });
+    // fork();fork();fork();fork();//fork();
+    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a", elans::runner::Runner::Limits{ .threads = 20ll, .memory = 10, .cpu_time_limit = 3'000, .real_time_limit = 5'000 });
     switch (runner.GetOutput().verdict) {
         case elans::runner::Runner::RunningResult::RE:
             cout << "RE" << endl;

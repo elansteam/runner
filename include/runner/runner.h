@@ -308,19 +308,19 @@ namespace elans {
                     return;
                 }
 
-                if (cpu_time_ejudge_end - cpu_time_ejudge_beg > lims.cpu_time_limit) {
-                    res_ = TestingResult{   .verdict = RunningResult::TL,
+                if (GetMaxMemoryCgroup() >= lims.memory) {
+                    res_ = TestingResult{   .verdict = RunningResult::ML,
                                             .exit_code =  0,
                                             .threads = 1,
-                                            .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
+                                            .cpu_time = (uint64_t)-1,
                                             .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
                                             .memory = GetMaxMemoryCgroup()
                                         };
                     return;
                 }
 
-                if (WIFSIGNALED(status)) {
-                    res_ = TestingResult{   .verdict = RunningResult::ML,
+                if (cpu_time_ejudge_end - cpu_time_ejudge_beg > lims.cpu_time_limit) {
+                    res_ = TestingResult{   .verdict = RunningResult::TL,
                                             .exit_code =  0,
                                             .threads = 1,
                                             .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
@@ -390,7 +390,7 @@ namespace elans {
                 std::ifstream fin("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.peak");
                 uint64_t ans;
                 fin >> ans;
-                return ans;
+                return ans / 1024;
             }
 
             void DeinitCgroups() const {
