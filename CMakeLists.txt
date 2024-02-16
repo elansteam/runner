@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.22)
-project(cpp-elans-safe-running)
+project(cpp-elans-runner)
 
 set(CMAKE_CXX_STANDARD 20)
 
 include_directories(include)
-add_library(elans-safe-running src/runner.cpp)
+add_library(runner src/runner.cpp)
 
 add_executable(test main.cpp)
-target_link_libraries(test elans-safe-running)
+target_link_libraries(test runner)
 
 add_subdirectory(extern/pybind11)
-pybind11_add_module(safe-running src/runner.cpp src/wrapper.cpp)
+pybind11_add_module(runner_lib_py src/runner.cpp src/wrapper.cpp)
