@@ -7,7 +7,7 @@ using namespace std;
 
 int main() {
     // fork();fork();fork();fork();//fork();
-    elans::runner::Runner runner("/usr/bin/ls",
+    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a",
         elans::runner::Runner::Limits{
             .threads = 20ll,
             .memory = 10000,

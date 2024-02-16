@@ -36,7 +36,7 @@ void elans::runner::Runner::SetUpSlave(std::string path, elans::runner::Runner::
     signal(SIGXCPU, SigHandler);
 
     ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
-    char *args[] = { path.data() };
+    char *args[] = { path.data() , NULL};
     execve(path.data(), args, nullptr);
     throw CantOpenExecutable(path);
 }
