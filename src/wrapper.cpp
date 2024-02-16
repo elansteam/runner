@@ -10,7 +10,7 @@ PYBIND11_MODULE(runner_lib_py, m) {
 
     py::class_<Runner> runner(m, "Runner");
     runner
-        .def(py::init<std::string, std::string, Runner::Limits>())
+        .def(py::init<std::string, Runner::Limits>())
             .def("GetOutput", &Runner::GetOutput, "wait for the slave program's end");
 
     py::class_<Runner::TestingResult>(runner, "TestingResult")
