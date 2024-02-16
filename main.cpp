@@ -11,10 +11,10 @@ int main() {
         elans::runner::Runner::Limits{
             .threads = 20ll,
             .memory = 10000,
-            .cpu_time_limit = 3'000,
+            .cpu_time_limit = 5'000,
             .real_time_limit = 5'000,
             .input_stream_file = "/home/pablo/Documents/project/runner/input.txt",
-            .output_stream_file = "/home/pablo/Documents/project/runner/outpup.txt"
+            .output_stream_file = "/tmp/runner/out"
             });
 
     switch (runner.GetOutput().verdict) {

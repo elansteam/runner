@@ -29,7 +29,7 @@ elans::runner::Runner::TestingResult elans::runner::Runner::GetOutput() {
 void elans::runner::Runner::SetUpSlave(std::string path, elans::runner::Runner::Limits lims) {
     int input = open(lims.input_stream_file.data(), O_RDONLY);
     int output = open(lims.output_stream_file.data(), O_WRONLY | O_TRUNC);
-    ftruncate(output, 1'000'000);
+    ftruncate(output, 100'000'000);
     dup2(input, STDIN_FILENO);
     dup2(output, STDOUT_FILENO);
     close(input);
@@ -93,7 +93,8 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
                 case __NR_sigaltstack:
                     kill(killer_pid, SIGKILL);
                     KillInSyscall(state);
-                    res_ = TestingResult{   .verdict = RunningResult::SE,
+                    res_ = TestingResult{
+                            .verdict = RunningResult::SE,
                             .exit_code =  0,
                             .threads = 1,
                             .cpu_time = GetCPUTime(slave_pid_) - cpu_time_ejudge_beg,
@@ -113,7 +114,8 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
                     if (!lims.allow_files_write) {
                         kill(killer_pid, SIGKILL);
                         KillInSyscall(state);
-                        res_ = TestingResult{   .verdict = RunningResult::SE,
+                        res_ = TestingResult{
+                                .verdict = RunningResult::SE,
                                 .exit_code =  0,
                                 .threads = 1,
                                 .cpu_time = GetCPUTime(slave_pid_) - cpu_time_ejudge_beg,
@@ -127,7 +129,8 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
                 case __NR_exit_group:
                     cpu_time_ejudge_end = GetCPUTime(slave_pid_);
                     if (state.rdi != 0 && state.rdi != 137) {
-                        res_ = TestingResult{   .verdict = RunningResult::RE,
+                        res_ = TestingResult{
+                                .verdict = RunningResult::RE,
                                 .exit_code =  (int)state.rdi,
                                 .threads = 1,
                                 .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
@@ -144,10 +147,9 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
         }
     }
 
-    if (kill(killer_pid, 0) == 0) {
-        kill(killer_pid, SIGKILL);
-    } else {
-        res_ = TestingResult{   .verdict = RunningResult::IE,
+    if (kill(killer_pid, SIGKILL) != 0) {
+        res_ = TestingResult{
+                .verdict = RunningResult::IE,
                 .exit_code =  0,
                 .threads = 1,
                 .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
@@ -158,7 +160,8 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
     }
 
     if (!res_.has_value() && GetMaxMemoryCgroup() >= lims.memory * 1024) {
-        res_ = TestingResult{   .verdict = RunningResult::ML,
+        res_ = TestingResult{
+                .verdict = RunningResult::ML,
                 .exit_code =  0,
                 .threads = 1,
                 .cpu_time = (uint64_t)-1,
@@ -169,7 +172,8 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
     }
 
     if (!res_.has_value() && cpu_time_ejudge_end - cpu_time_ejudge_beg > lims.cpu_time_limit) {
-        res_ = TestingResult{   .verdict = RunningResult::TL,
+        res_ = TestingResult{
+                .verdict = RunningResult::TL,
                 .exit_code =  0,
                 .threads = 1,
                 .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
@@ -180,7 +184,8 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
     }
 
     if (!res_.has_value()) {
-        res_ = TestingResult{   .verdict = RunningResult::OK,
+        res_ = TestingResult{
+                .verdict = RunningResult::OK,
                 .exit_code =  0,
                 .threads = 1,
                 .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
