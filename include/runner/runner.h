@@ -56,7 +56,7 @@ namespace elans {
                 uint64_t memory; // bytes
             };
 
-            Runner(const std::string &path, Limits lims) {
+            Runner(std::string path, Limits lims) {
                 runner_number_ = GetRunnerNumber();
 
                 slave_pid_ = fork();
@@ -82,8 +82,8 @@ namespace elans {
             uint32_t runner_number_;
 
             void SetUpSlave(const std::string &path, Limits lims) {
-                int output = open(lims.output_stream_file.data(), O_RDWR | O_CREAT);
-                int input = open(lims.output_stream_file.data(), O_RDWR | O_CREAT);
+                int output = open(lims.output_stream_file.data(), O_RDWR);
+                int input = open(lims.output_stream_file.data(), O_RDWR);
                 dup2(input, STDIN_FILENO);
                 dup2(output, STDOUT_FILENO);
                 close(input);
