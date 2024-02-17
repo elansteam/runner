@@ -10,7 +10,7 @@ int main() {
     elans::runner::Runner runner("/home/pablo/Documents/project/runner/a",
         elans::runner::Runner::Limits{
             .threads = 20ll,
-            .memory = 10000,
+            .memory = 1'000'000'000,
             .cpu_time_limit = 5'000,
             .real_time_limit = 5'000,
             .input_stream_file = "/home/pablo/Documents/project/runner/input.txt",

@@ -11,7 +11,7 @@ elans::runner::Runner::Runner(std::string path, elans::runner::Runner::Limits li
 
     slave_pid_ = fork();
     if (slave_pid_) {
-        InitCgroups(lims.memory);
+        InitCgroups(lims);
         PtraceProcess(lims);
     } else {
         SetUpSlave(path, lims);
@@ -234,10 +234,11 @@ uint64_t elans::runner::Runner::GetCPUTime(pid_t pid) {
     return (utime + stime) * 1'000 / sysconf(_SC_CLK_TCK);
 }
 
-void elans::runner::Runner::InitCgroups(uint64_t memory_limit) const {
+void elans::runner::Runner::InitCgroups(Limits lims) const {
     std::filesystem::create_directory("/sys/fs/cgroup/group" + std::to_string(runner_number_));
     Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/cgroup.procs", std::to_string(slave_pid_));
-    Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.max", std::to_string(memory_limit * 1024));
+    Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.max", std::to_string(lims.memory * 1024));
+    Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.low", std::to_string(lims.memory * 1024 - 1));
 }
 
 uint64_t elans::runner::Runner::GetMaxMemoryCgroup() const {
@@ -248,12 +249,7 @@ uint64_t elans::runner::Runner::GetMaxMemoryCgroup() const {
 }
 
 void elans::runner::Runner::DeinitCgroups() const {
-    while (true) {
-        try {
-            std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(runner_number_));
-            break;
-        } catch(...) {}
-    }
+    std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(runner_number_));
 }
 
 uint16_t elans::runner::Runner::GetRunnerNumber() {

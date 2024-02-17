@@ -80,7 +80,7 @@ namespace elans {
 
             static uint64_t GetCPUTime(pid_t pid);
 
-            void InitCgroups(uint64_t memory_limit) const;
+            void InitCgroups(Limits lims) const;
 
             uint64_t GetMaxMemoryCgroup() const;
 
