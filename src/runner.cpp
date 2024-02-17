@@ -159,7 +159,7 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
         return;
     }
 
-    if (!res_.has_value() && GetMaxMemoryCgroup() >= lims.memory * 1024) {
+    if (!res_.has_value() && GetMaxMemoryCgroup() >= lims.memory) {
         res_ = TestingResult{
                 .verdict = RunningResult::ML,
                 .exit_code =  0,
