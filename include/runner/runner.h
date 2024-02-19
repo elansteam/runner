@@ -51,6 +51,7 @@ namespace elans {
                 uint64_t cpu_time; // ms
                 uint64_t real_time; // ms
                 uint64_t memory; // bytes
+                std::string output;
             };
 
             Runner(std::string path, Limits lims);
@@ -63,8 +64,9 @@ namespace elans {
             std::optional<TestingResult> res_;
             pid_t slave_pid_;
             uint32_t runner_number_;
+            int out_fd_[2];
 
-            static void SetUpSlave(std::string path, Limits lims);
+            void SetUpSlave(std::string path, Limits lims) const;
 
             void KillInSyscall(user_regs_struct &state);
 
