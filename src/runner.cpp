@@ -28,8 +28,7 @@ elans::runner::Runner::TestingResult elans::runner::Runner::GetOutput() {
 
 void elans::runner::Runner::SetUpSlave(std::string path, elans::runner::Runner::Limits lims) {
     int input = open(lims.input_stream_file.data(), O_RDONLY);
-    int output = open(lims.output_stream_file.data(), O_WRONLY | O_TRUNC);
-    ftruncate(output, 100'000'000);
+    int output = open("/dev/null", O_WRONLY | O_TRUNC);
     dup2(input, STDIN_FILENO);
     dup2(output, STDOUT_FILENO);
     close(input);
@@ -74,6 +73,7 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
     uint64_t cpu_time_ejudge_beg = GetCPUTime(slave_pid_);
     auto beg_real_time = std::chrono::high_resolution_clock::now();
 
+    std::string output;
     ptrace(PTRACE_SETOPTIONS, slave_pid_, 0, PTRACE_O_TRACESYSGOOD);
     while (!WIFEXITED(status) && !WIFSIGNALED(status)) {
         user_regs_struct state{};
@@ -120,7 +120,8 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
                                 .threads = 1,
                                 .cpu_time = GetCPUTime(slave_pid_) - cpu_time_ejudge_beg,
                                 .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                                .memory = GetMaxMemoryCgroup()
+                                .memory = GetMaxMemoryCgroup(),
+                                .output = std::move(output)
                         };
                         return;
                     }
@@ -135,10 +136,24 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
                                 .threads = 1,
                                 .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
                                 .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                                .memory = GetMaxMemoryCgroup()
+                                .memory = GetMaxMemoryCgroup(),
+                                .output = std::move(output)
                         };
                     } else if (state.rdi == 137) {
                         throw std::runtime_error("IT CAN HAPPEN!!!");
+                    }
+                    break;
+                case __NR_write:
+                    if (state.rdi == STDOUT_FILENO) {
+                        int64_t len_of_message = state.rdx;
+                        const int64_t len_of_block = sizeof(long) / sizeof(char);
+                        uint64_t ptr_in_slave = state.rsi;
+                        while (len_of_message > 0) {
+                            long val = ptrace(PTRACE_PEEKDATA, slave_pid_, ptr_in_slave, nullptr);
+                            output += std::string(reinterpret_cast<const char*>(&val), std::min(len_of_block, len_of_message));
+                            len_of_message -= len_of_block;
+                            ptr_in_slave += len_of_block;
+                        }
                     }
                     break;
             }
@@ -154,7 +169,8 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
                 .threads = 1,
                 .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
                 .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                .memory = GetMaxMemoryCgroup()
+                .memory = GetMaxMemoryCgroup(),
+                .output = std::move(output)
         };
         return;
     }
@@ -166,7 +182,8 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
                 .threads = 1,
                 .cpu_time = (uint64_t)-1,
                 .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                .memory = GetMaxMemoryCgroup()
+                .memory = GetMaxMemoryCgroup(),
+                .output = std::move(output)
         };
         return;
     }
@@ -178,7 +195,8 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
                 .threads = 1,
                 .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
                 .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                .memory = GetMaxMemoryCgroup()
+                .memory = GetMaxMemoryCgroup(),
+                .output = std::move(output)
         };
         return;
     }
@@ -190,7 +208,8 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
                 .threads = 1,
                 .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
                 .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                .memory = GetMaxMemoryCgroup()
+                .memory = GetMaxMemoryCgroup(),
+                .output = std::move(output)
         };
     }
 }

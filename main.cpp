@@ -7,14 +7,13 @@ using namespace std;
 
 int main() {
     // fork();fork();fork();fork();//fork();
-    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a",
+    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a.out",
         elans::runner::Runner::Limits{
             .threads = 20ll,
             .memory = 1'000'000'000,
-            .cpu_time_limit = 5'000,
-            .real_time_limit = 5'000,
-            .input_stream_file = "/home/pablo/Documents/project/runner/input.txt",
-            .output_stream_file = "/tmp/runner/out"
+            .cpu_time_limit = 4'000,
+            .real_time_limit = 8'000,
+            .input_stream_file = "/home/pablo/Documents/project/runner/input.txt"
             });
 
     switch (runner.GetOutput().verdict) {
@@ -39,4 +38,6 @@ int main() {
     }
 
     cout << "Execution time: " << runner.GetOutput().cpu_time << endl;
+    cout << "Real time: " << runner.GetOutput().real_time << endl;
+    cout << "Output: " << runner.GetOutput().output << endl;
 }

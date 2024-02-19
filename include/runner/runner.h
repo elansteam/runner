@@ -41,7 +41,6 @@ namespace elans {
                 bool allow_files_write;
                 bool allow_files_read;
                 std::string input_stream_file;
-                std::string output_stream_file;
             };
 
             struct TestingResult {
@@ -51,6 +50,7 @@ namespace elans {
                 uint64_t cpu_time; // ms
                 uint64_t real_time; // ms
                 uint64_t memory; // bytes
+                std::string output;
             };
 
             Runner(std::string path, Limits lims);
