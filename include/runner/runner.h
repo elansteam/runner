@@ -51,7 +51,6 @@ namespace elans {
                 uint64_t cpu_time; // ms
                 uint64_t real_time; // ms
                 uint64_t memory; // bytes
-                std::string output;
             };
 
             Runner(std::string path, Limits lims);
