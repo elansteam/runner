@@ -38,5 +38,5 @@ int main() {
 
     cout << "Execution time: " << runner.GetOutput().cpu_time << endl;
     cout << "Real time: " << runner.GetOutput().real_time << endl;
-    cout << "Out: " << runner.GetOutput().output << endl;
+//    cout << "Out: " << runner.GetOutput().output << endl;
 }

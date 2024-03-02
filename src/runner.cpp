@@ -147,15 +147,15 @@ void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
                     break;
                 case __NR_write:
                     if (state.rdi == STDOUT_FILENO) {
+                        if (pipe_buf_size + state.rdx >= 65'536) {
+                            output.resize(output.size() + pipe_buf_size);
+                            read(out_fd_[0], (output.end() - pipe_buf_size).base(), pipe_buf_size);
+                            pipe_buf_size = 0;
+                        }
                         pipe_buf_size += state.rdx;
                     }
             }
             ptrace(PTRACE_SYSCALL, slave_pid_, 0, 0);
-            while (pipe_buf_size > 1024) {
-                output.resize(output.size() + pipe_buf_size);
-                read(out_fd_[0], (output.end() - pipe_buf_size).base(), pipe_buf_size);
-                pipe_buf_size = 0;
-            }
             waitpid(slave_pid_, &status, 0);
         }
     }
