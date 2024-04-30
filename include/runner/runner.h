@@ -49,6 +49,7 @@ namespace elans {
                 std::vector<std::string> args;
                 Limits lims;
                 uid_t user;
+                std::string working_directory;
             };
 
             struct TestingResult {

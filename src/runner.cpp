@@ -29,6 +29,7 @@ void elans::runner::Runner::SetUpSlave(std::string path, elans::runner::Runner::
         close(output);
     }
 
+    chdir(params.working_directory.data());
     setuid(params.user);
 
     std::vector<char*> args_ptrs(params.args.size());
