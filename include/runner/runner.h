@@ -48,6 +48,7 @@ namespace elans {
                 std::string output_stream_file;
                 std::vector<std::string> args;
                 Limits lims;
+                uid_t user;
             };
 
             struct TestingResult {

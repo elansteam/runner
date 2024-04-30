@@ -29,7 +29,7 @@ void elans::runner::Runner::SetUpSlave(std::string path, elans::runner::Runner::
         close(output);
     }
 
-
+    setuid(params.user);
 
     std::vector<char*> args_ptrs(params.args.size());
     std::transform(params.args.begin(), params.args.end(), args_ptrs.begin(), [] (std::string &str) {
@@ -53,17 +53,12 @@ pid_t elans::runner::Runner::RunKillerByRealTime(uint64_t millis_limit) {
 }
 
 void elans::runner::Runner::ControlExecution(elans::runner::Runner::Limits lims) {
-    LOG();
     auto beg_real_time = std::chrono::high_resolution_clock::now();
-    LOG();
     pid_t real_time_killer_pid = RunKillerByRealTime(lims.real_time_limit);
-    LOG();
     pid_t cpu_time_killer_pid = RunKillerByCpuTime(lims.cpu_time_limit);
 
     int status;
-    LOG();
     message_assert(waitpid(slave_pid_, &status, 0) != -1, "Error while waiting for slave");
-    LOG();
 
     auto end_real_time = std::chrono::high_resolution_clock::now();
     res_.cpu_time = GetCPUTime();
