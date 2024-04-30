@@ -28,8 +28,9 @@ void elans::runner::Runner::SetUpSlave(std::string path, elans::runner::Runner::
         close(input);
         close(output);
     }
-
+    message_assert(mount("/usr", params.working_directory.data(), "ext4", MS_RDONLY, nullptr) == 0, "Failed to mount");
     chdir(params.working_directory.data());
+
     setuid(params.user);
 
     std::vector<char*> args_ptrs(params.args.size());
@@ -140,6 +141,9 @@ uint16_t elans::runner::Runner::GetRunnerNumber() {
 void _message_assert_func(bool cond, size_t line, std::string_view file, std::string_view mess) {
     if (!cond) {
         std::cerr << "Assertation failed at line: " << line << " of file: \"" << file << "\" with message: \"" << mess << "\"" << std::endl;
+        if (errno != 0) {
+            std::cerr << "Errno value: " << errno << std::endl;
+        }
         exit(EXIT_FAILURE);
     }
 }

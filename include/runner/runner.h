@@ -16,6 +16,7 @@
 #include <sys/mman.h>
 #include <sys/ptrace.h>
 #include <sys/resource.h>
+#include <sys/mount.h>
 
 inline void _message_assert_func(bool cond, size_t line, std::string_view file, std::string_view mess);
 

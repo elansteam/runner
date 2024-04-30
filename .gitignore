@@ -175,3 +175,4 @@ tester.o
 tester.sh
 /in.txt
 /out.txt
+/working_dir/
