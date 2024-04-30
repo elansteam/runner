@@ -173,3 +173,5 @@ out/
 tester.cpp
 tester.o
 tester.sh
+/in.txt
+/out.txt

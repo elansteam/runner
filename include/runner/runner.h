@@ -1,33 +1,34 @@
 #include <optional>
 #include <csignal>
 #include <exception>
+#include <cstdint>
+#include <chrono>
+#include <thread>
+#include <ranges>
+#include <filesystem>
+#include <fstream>
+#include <random>
+#include <iostream>
+#include <unistd.h>
+#include <fcntl.h>
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <sys/mman.h>
 #include <sys/ptrace.h>
-#include <unistd.h>
 #include <sys/resource.h>
 
-#include <bits/stdc++.h>
-#include <fcntl.h>
-constexpr int TL_EXIT_CODE = 132;
+inline void _message_assert_func(bool cond, size_t line, std::string_view file, std::string_view mess);
 
-void SignalHandler(int sig);
+#define message_assert(cond, mess) _message_assert_func((cond), __LINE__, __FILE__, (mess))
 
 namespace elans {
     namespace runner {
-        struct CantOpenExecutable : public std::runtime_error {
-            using std::runtime_error::runtime_error;
-        };
-
         class Runner {
         public:
-            static constexpr int TL_EXIT_CODE = 132;
-
             enum class RunningResult {
-                TL = 0,
-                IE = 1,
-                ML = 2,
+                TL = 0,//
+                IE = 1,//
+                ML = 2,//
                 OK = 3,
                 RE = 4,
                 SE = 5
@@ -40,37 +41,50 @@ namespace elans {
                 uint64_t real_time_limit; // ms
                 bool allow_files_write;
                 bool allow_files_read;
+            };
+
+            struct Params {
                 std::string input_stream_file;
+                std::string output_stream_file;
+                std::vector<std::string> args;
+                Limits lims;
             };
 
             struct TestingResult {
                 RunningResult verdict;
-                int exit_code;
-                uint16_t threads;
                 uint64_t cpu_time; // ms
                 uint64_t real_time; // ms
-                uint64_t memory; // bytes
-                std::string output;
+                uint64_t memory; // kb
             };
 
-            Runner(std::string path, Limits lims);
+            Runner(std::string path, Params params);
 
             ~Runner();
 
             TestingResult GetOutput();
             
         private:
-            std::optional<TestingResult> res_;
+            TestingResult res_;
             pid_t slave_pid_;
             uint32_t runner_number_;
 
-            static void SetUpSlave(std::string path, Limits lims);
+            [[noreturn]] static void SetUpSlave(std::string path, Params params);
 
-            void KillInSyscall(user_regs_struct &state);
+            pid_t RunKillerByRealTime(uint64_t millis_limit);
 
-            pid_t RunKiller(pid_t slave, uint64_t millis_limit);
+            pid_t RunKillerByCpuTime(uint64_t millis_limit) {
+                pid_t proc_pid = fork();
+                message_assert(proc_pid != -1, "Cant create a process");
+                if (proc_pid != 0) {
+                    return proc_pid;
+                } else {
+                    while (GetCPUTime() <= millis_limit) {}
+                    kill(slave_pid_, SIGKILL);
+                    exit(EXIT_SUCCESS);
+                }
+            }
 
-            void PtraceProcess(Limits lims);
+            void ControlExecution(elans::runner::Runner::Limits lims);
 
             static void Write(std::string path, std::string data);
 
@@ -78,7 +92,7 @@ namespace elans {
 
             static void SigHandler(int);
 
-            static uint64_t GetCPUTime(pid_t pid);
+            uint64_t GetCPUTime();
 
             void InitCgroups(Limits lims) const;
 

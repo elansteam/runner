@@ -1,20 +1,17 @@
 #include "runner/runner.h"
 
+#define LOG() if (true) { std::cerr << __LINE__ << std::endl; }
 
-void SignalHandler(int sig) {
-    assert(sig == SIGXCPU);
-    exit(TL_EXIT_CODE);
-}
-
-elans::runner::Runner::Runner(std::string path, elans::runner::Runner::Limits lims) {
+elans::runner::Runner::Runner(std::string path, elans::runner::Runner::Params params) {
     runner_number_ = GetRunnerNumber();
 
     slave_pid_ = fork();
+    message_assert(slave_pid_ != -1, "Can't create process");
     if (slave_pid_) {
-        InitCgroups(lims);
-        PtraceProcess(lims);
+        InitCgroups(params.lims);
+        ControlExecution(params.lims);
     } else {
-        SetUpSlave(path, lims);
+        SetUpSlave(path, params);
     }
 }
 
@@ -22,195 +19,70 @@ elans::runner::Runner::~Runner() {
     DeinitCgroups();
 }
 
-elans::runner::Runner::TestingResult elans::runner::Runner::GetOutput() {
-    return *res_;
+void elans::runner::Runner::SetUpSlave(std::string path, elans::runner::Runner::Params params) {
+    {
+        int input = open(params.input_stream_file.data(), O_RDONLY);
+        int output = open(params.output_stream_file.data(), O_WRONLY | O_TRUNC);
+        dup2(input, STDIN_FILENO);
+        dup2(output, STDOUT_FILENO);
+        close(input);
+        close(output);
+    }
+
+
+
+    std::vector<char*> args_ptrs(params.args.size());
+    std::transform(params.args.begin(), params.args.end(), args_ptrs.begin(), [] (std::string &str) {
+        return str.data();
+    });
+
+    execv(path.data(), args_ptrs.data());
+    message_assert(false, "Failed to execute");
 }
 
-void elans::runner::Runner::SetUpSlave(std::string path, elans::runner::Runner::Limits lims) {
-    int input = open(lims.input_stream_file.data(), O_RDONLY);
-    int output = open("/dev/null", O_WRONLY | O_TRUNC);
-    dup2(input, STDIN_FILENO);
-    dup2(output, STDOUT_FILENO);
-    close(input);
-    close(output);
-    signal(SIGXCPU, SigHandler);
-
-    ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
-    char *args[] = { path.data() , NULL};
-    execve(path.data(), args, nullptr);
-    throw CantOpenExecutable(path);
-}
-
-void elans::runner::Runner::KillInSyscall(user_regs_struct &state) {
-    state.orig_rax = __NR_kill;
-    state.rdi = slave_pid_;
-    state.rsi = SIGKILL;
-    ptrace(PTRACE_SETREGS, slave_pid_, 0, &state);
-    ptrace(PTRACE_CONT, slave_pid_, 0, 0);
-}
-
-pid_t elans::runner::Runner::RunKiller(pid_t slave, uint64_t millis_limit) {
+pid_t elans::runner::Runner::RunKillerByRealTime(uint64_t millis_limit) {
     pid_t killer_pid = fork();
+    message_assert(killer_pid != -1, "Can't create a process");
     if (killer_pid) {
         return killer_pid;
     } else {
         std::this_thread::sleep_for(std::chrono::milliseconds(millis_limit));
-        kill(slave, SIGKILL);
+        kill(slave_pid_, SIGKILL);
         exit(EXIT_SUCCESS);
     }
 }
 
-void elans::runner::Runner::PtraceProcess(elans::runner::Runner::Limits lims) {
-    rlimit lim(lims.cpu_time_limit / 1000 + 1, RLIM_INFINITY);
-
-    uint64_t cpu_time_ejudge_end;
+void elans::runner::Runner::ControlExecution(elans::runner::Runner::Limits lims) {
+    LOG();
+    auto beg_real_time = std::chrono::high_resolution_clock::now();
+    LOG();
+    pid_t real_time_killer_pid = RunKillerByRealTime(lims.real_time_limit);
+    LOG();
+    pid_t cpu_time_killer_pid = RunKillerByCpuTime(lims.cpu_time_limit);
 
     int status;
-    waitpid(slave_pid_, &status, 0);
+    LOG();
+    message_assert(waitpid(slave_pid_, &status, 0) != -1, "Error while waiting for slave");
+    LOG();
 
-    pid_t killer_pid = RunKiller(slave_pid_, lims.real_time_limit);
-    prlimit(slave_pid_, RLIMIT_CPU, &lim, nullptr);
-    uint64_t cpu_time_ejudge_beg = GetCPUTime(slave_pid_);
-    auto beg_real_time = std::chrono::high_resolution_clock::now();
+    auto end_real_time = std::chrono::high_resolution_clock::now();
+    res_.cpu_time = GetCPUTime();
+    res_.real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count();
+    res_.memory = GetMaxMemoryCgroup();
 
-    std::string output;
-    ptrace(PTRACE_SETOPTIONS, slave_pid_, 0, PTRACE_O_TRACESYSGOOD);
-    while (!WIFEXITED(status) && !WIFSIGNALED(status)) {
-        user_regs_struct state{};
-        ptrace(PTRACE_SYSCALL, slave_pid_, 0, 0);
-        waitpid(slave_pid_, &status, 0);
-        if (WIFSTOPPED(status) && WSTOPSIG(status) & 0x80) {
-            ptrace(PTRACE_GETREGS, slave_pid_, 0, &state);
-            switch (state.orig_rax) {
-                // rasstrel
-                case __NR_clone:
-                case __NR_fork:
-                case __NR_execve:
-                case __NR_ptrace:
-                case __NR_setgid:
-                case __NR_setgroups:
-                case __NR_signalfd:
-                case __NR_sigaltstack:
-                    kill(killer_pid, SIGKILL);
-                    KillInSyscall(state);
-                    res_ = TestingResult{
-                            .verdict = RunningResult::SE,
-                            .exit_code =  0,
-                            .threads = 1,
-                            .cpu_time = GetCPUTime(slave_pid_) - cpu_time_ejudge_beg,
-                            .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                            .memory = GetMaxMemoryCgroup()
-                    };
-                    return;
-                case __NR_mkdir:
-                case __NR_rmdir:
-                case __NR_creat:
-                case __NR_link:
-                case __NR_symlink:
-                case __NR_chmod:
-                case __NR_chown:
-                case __NR_lchown:
-                case __NR_umask:
-                    if (!lims.allow_files_write) {
-                        kill(killer_pid, SIGKILL);
-                        KillInSyscall(state);
-                        res_ = TestingResult{
-                                .verdict = RunningResult::SE,
-                                .exit_code =  0,
-                                .threads = 1,
-                                .cpu_time = GetCPUTime(slave_pid_) - cpu_time_ejudge_beg,
-                                .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                                .memory = GetMaxMemoryCgroup(),
-                                .output = std::move(output)
-                        };
-                        return;
-                    }
-                    break;
-                case __NR_exit:
-                case __NR_exit_group:
-                    cpu_time_ejudge_end = GetCPUTime(slave_pid_);
-                    if (state.rdi != 0 && state.rdi != 137) {
-                        res_ = TestingResult{
-                                .verdict = RunningResult::RE,
-                                .exit_code =  (int)state.rdi,
-                                .threads = 1,
-                                .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
-                                .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                                .memory = GetMaxMemoryCgroup(),
-                                .output = std::move(output)
-                        };
-                    } else if (state.rdi == 137) {
-                        throw std::runtime_error("IT CAN HAPPEN!!!");
-                    }
-                    break;
-                case __NR_write:
-                    if (state.rdi == STDOUT_FILENO) {
-                        int64_t len_of_message = state.rdx;
-                        const int64_t len_of_block = sizeof(long) / sizeof(char);
-                        uint64_t ptr_in_slave = state.rsi;
-                        while (len_of_message > 0) {
-                            long val = ptrace(PTRACE_PEEKDATA, slave_pid_, ptr_in_slave, nullptr);
-                            output += std::string(reinterpret_cast<const char*>(&val), std::min(len_of_block, len_of_message));
-                            len_of_message -= len_of_block;
-                            ptr_in_slave += len_of_block;
-                        }
-                    }
-                    break;
-            }
-            ptrace(PTRACE_SYSCALL, slave_pid_, 0, 0);
-            waitpid(slave_pid_, &status, 0);
-        }
-    }
-
-    if (kill(killer_pid, SIGKILL) != 0) {
-        res_ = TestingResult{
-                .verdict = RunningResult::IE,
-                .exit_code =  0,
-                .threads = 1,
-                .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
-                .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                .memory = GetMaxMemoryCgroup(),
-                .output = std::move(output)
-        };
-        return;
-    }
-
-    if (!res_.has_value() && GetMaxMemoryCgroup() >= lims.memory) {
-        res_ = TestingResult{
-                .verdict = RunningResult::ML,
-                .exit_code =  0,
-                .threads = 1,
-                .cpu_time = (uint64_t)-1,
-                .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                .memory = GetMaxMemoryCgroup(),
-                .output = std::move(output)
-        };
-        return;
-    }
-
-    if (!res_.has_value() && cpu_time_ejudge_end - cpu_time_ejudge_beg > lims.cpu_time_limit) {
-        res_ = TestingResult{
-                .verdict = RunningResult::TL,
-                .exit_code =  0,
-                .threads = 1,
-                .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
-                .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                .memory = GetMaxMemoryCgroup(),
-                .output = std::move(output)
-        };
-        return;
-    }
-
-    if (!res_.has_value()) {
-        res_ = TestingResult{
-                .verdict = RunningResult::OK,
-                .exit_code =  0,
-                .threads = 1,
-                .cpu_time = cpu_time_ejudge_end - cpu_time_ejudge_beg,
-                .real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count(),
-                .memory = GetMaxMemoryCgroup(),
-                .output = std::move(output)
-        };
+    if (kill(real_time_killer_pid, SIGKILL) != 0) {
+        kill(cpu_time_killer_pid, SIGKILL);
+        res_.verdict = RunningResult::IE;
+    } else if (kill(cpu_time_killer_pid, SIGKILL) != 0) {
+        res_.verdict = RunningResult::TL;
+    } else if (GetMaxMemoryCgroup() >= lims.memory) {
+        res_.verdict = RunningResult::ML;
+    } else if (WEXITSTATUS(status) != 0) {
+        res_.verdict = RunningResult::RE;
+    } else if (WIFSIGNALED(status) && WTERMSIG(status) == SIGSYS) {
+        res_.verdict = RunningResult::SE;
+    } else {
+        res_.verdict = RunningResult::OK;
     }
 }
 
@@ -238,19 +110,11 @@ std::string elans::runner::Runner::Read(std::string path) {
     return s;
 }
 
-void elans::runner::Runner::SigHandler(int) {
-    exit(52);
-}
-
-uint64_t elans::runner::Runner::GetCPUTime(pid_t pid) {
-    std::ifstream fin("/proc/" + std::to_string(pid) + "/stat");
-    for (int i = 0; i < 13; ++i) {
-        std::string trash;
-        fin >> trash;
-    }
-    uint64_t utime, stime;
-    fin >> utime >> stime;
-    return (utime + stime) * 1'000 / sysconf(_SC_CLK_TCK);
+uint64_t elans::runner::Runner::GetCPUTime() {
+    std::ifstream fin("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/cgroup.procs");
+    uint64_t ans_usec;
+    fin >> ans_usec;
+    return ans_usec / 1000;
 }
 
 void elans::runner::Runner::InitCgroups(Limits lims) const {
@@ -258,6 +122,7 @@ void elans::runner::Runner::InitCgroups(Limits lims) const {
     Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/cgroup.procs", std::to_string(slave_pid_));
     Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.max", std::to_string(lims.memory * 1024));
     Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.low", std::to_string(lims.memory * 1024 - 1));
+    Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/pids.max", std::to_string(lims.threads));
 }
 
 uint64_t elans::runner::Runner::GetMaxMemoryCgroup() const {
@@ -275,4 +140,10 @@ uint16_t elans::runner::Runner::GetRunnerNumber() {
     static std::random_device rd;
     static std::mt19937 gen(rd());
     return gen();
+}
+void _message_assert_func(bool cond, size_t line, std::string_view file, std::string_view mess) {
+    if (!cond) {
+        std::cerr << "Assertation failed at line: " << line << " of file: \"" << file << "\" with message: \"" << mess << "\"" << std::endl;
+        exit(EXIT_FAILURE);
+    }
 }

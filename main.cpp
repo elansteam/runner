@@ -1,43 +1,25 @@
-// #pragma GCC optimize(s"O3")
-
 #include <iostream>
 #include "runner/runner.h"
 
 using namespace std;
 
 int main() {
-    // fork();fork();fork();fork();//fork();
-    elans::runner::Runner runner("/home/pablo/Documents/project/runner/a.out",
-        elans::runner::Runner::Limits{
-            .threads = 20ll,
-            .memory = 1'000'000'000,
-            .cpu_time_limit = 4'000,
-            .real_time_limit = 8'000,
-            .input_stream_file = "/home/pablo/Documents/project/runner/input.txt"
-            });
-
-    switch (runner.GetOutput().verdict) {
-        case elans::runner::Runner::RunningResult::RE:
-            cout << "RE" << endl;
-            break;
-        case elans::runner::Runner::RunningResult::OK:
-            cout << "OK" << endl;
-            break;
-        case elans::runner::Runner::RunningResult::ML:
-            cout << "ML" << endl;
-            break;
-        case elans::runner::Runner::RunningResult::SE:
-            cout << "SE" << endl;
-            break;
-        case elans::runner::Runner::RunningResult::TL:
-            cout << "TL" << endl;
-            break;
-        case elans::runner::Runner::RunningResult::IE:
-            cout << "IE" << endl;
-            break;
-    }
-
-    cout << "Execution time: " << runner.GetOutput().cpu_time << endl;
-    cout << "Real time: " << runner.GetOutput().real_time << endl;
-    cout << "Output: " << runner.GetOutput().output << endl;
+    std::string in_path = "/home/pablo/Documents/project/runner/in.txt";
+    std::string out_path = "/home/pablo/Documents/project/runner/out.txt";
+    elans::runner::Runner::Params params;
+    elans::runner::Runner::Limits lims;
+    lims.threads = 1;
+    lims.memory = 1024;
+    lims.cpu_time_limit = 1000;
+    lims.real_time_limit = 2000;
+    lims.allow_files_write = true;
+    lims.allow_files_read = true;
+    params.lims = lims;
+    params.args = { "ls", "-a" };
+    params.input_stream_file = in_path;
+    params.output_stream_file = out_path;
+    elans::runner::Runner runner("/usr/bin/ls", params);
+    std::ifstream fin(out_path);
+    std::string buf(1024, 'a');
+    cout.write(buf.data(), fin.readsome(buf.data(), 1024));
 }
