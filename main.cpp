@@ -15,12 +15,12 @@ int main() {
     lims.allow_files_write = true;
     lims.allow_files_read = true;
     params.lims = lims;
-    params.args = { "/usr/bin/ls" };
+    params.args = { "/tmp/tmp.N8QGAlSWyX/working_dir/a.out" };
     params.input_stream_file = in_path;
     params.output_stream_file = out_path;
     params.user = 1000;
-    params.working_directory = "/home/pablo/Documents/project/runner/working_dir";
-    elans::runner::Runner runner("ls", params);
+    params.working_directory = "/tmp/tmp.N8QGAlSWyX/working_dir";
+    elans::runner::Runner runner("/tmp/tmp.N8QGAlSWyX/working_dir/a.out", params);
     std::ifstream fin(out_path);
     std::string buf(1024, 'a');
     cout.write(buf.data(), fin.readsome(buf.data(), 1024));

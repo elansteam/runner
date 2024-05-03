@@ -17,6 +17,7 @@
 #include <sys/ptrace.h>
 #include <sys/resource.h>
 #include <sys/mount.h>
+#include <sys/stat.h>
 
 inline void _message_assert_func(bool cond, size_t line, std::string_view file, std::string_view mess);
 
@@ -70,24 +71,15 @@ namespace elans {
             TestingResult res_;
             pid_t slave_pid_;
             uint32_t runner_number_;
+            Params params_;
 
-            [[noreturn]] static void SetUpSlave(std::string path, Params params);
+            [[noreturn]] void SetUpSlave(std::string path);
 
             pid_t RunKillerByRealTime(uint64_t millis_limit);
 
-            pid_t RunKillerByCpuTime(uint64_t millis_limit) {
-                pid_t proc_pid = fork();
-                message_assert(proc_pid != -1, "Cant create a process");
-                if (proc_pid != 0) {
-                    return proc_pid;
-                } else {
-                    while (GetCPUTime() <= millis_limit) {}
-                    kill(slave_pid_, SIGKILL);
-                    exit(EXIT_SUCCESS);
-                }
-            }
+            pid_t RunKillerByCpuTime(uint64_t millis_limit);
 
-            void ControlExecution(elans::runner::Runner::Limits lims);
+            void ControlExecution();
 
             static void Write(std::string path, std::string data);
 
@@ -97,13 +89,17 @@ namespace elans {
 
             uint64_t GetCPUTime();
 
-            void InitCgroups(Limits lims) const;
+            void InitCgroups() const;
 
             uint64_t GetMaxMemoryCgroup() const;
 
             void DeinitCgroups() const;
 
             static uint16_t GetRunnerNumber();
+
+            void InitMount();
+
+            void DeinitMount();
         };
     } // namespace runner
 } // namespace elans

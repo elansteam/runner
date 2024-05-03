@@ -11,5 +11,5 @@ add_library(runner src/runner.cpp)
 add_executable(test main.cpp)
 target_link_libraries(test runner)
 
-add_subdirectory(extern/pybind11)
-pybind11_add_module(runner_lib_py src/runner.cpp src/wrapper.cpp)
+#add_subdirectory(extern/pybind11)
+#pybind11_add_module(runner_lib_py src/runner.cpp src/wrapper.cpp)
