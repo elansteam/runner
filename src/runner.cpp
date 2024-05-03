@@ -34,9 +34,9 @@ void elans::runner::Runner::SetUpSlave(std::string path) {
     }
     message_assert(chdir(params_.working_directory.data()) != -1, "Chdir failed");
     message_assert(chroot(params_.working_directory.data()) != -1, "Chroot failed");
+    // message_assert(chmod(path.data(), S_IXGRP | S_IXUSR | S_IXOTH) != -1, "Failed to chmod");
 
     EPERM;
-    message_assert(chmod(path.data(), S_IXGRP | S_IXUSR | S_IXOTH) != -1, "Failed to chmod");
     message_assert(setuid(params_.user) != -1, "Changing user failed");
     message_assert(getuid() == params_.user, "Changing user failed");
 
@@ -68,6 +68,7 @@ void elans::runner::Runner::ControlExecution() {
 
     int status;
     message_assert(waitpid(slave_pid_, &status, 0) != -1, "Error while waiting for slave");
+    LOG();
 
     res_.cpu_time = GetCPUTime();
     res_.real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count();
@@ -158,15 +159,45 @@ pid_t elans::runner::Runner::RunKillerByCpuTime(uint64_t millis_limit) {
 }
 
 void elans::runner::Runner::InitMount() {
-    std::filesystem::create_directories(params_.working_directory + "/usr");
-    std::string path_to_new_usr = params_.working_directory + "/usr";
-    ENODEV;
-    message_assert(mount("/usr", path_to_new_usr.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount");
+    {
+        std::filesystem::create_directories(params_.working_directory + "/usr");
+        std::string path_to_new_usr = params_.working_directory + "/usr";
+        message_assert(mount("/usr", path_to_new_usr.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount");
+    }
+    {
+        std::filesystem::create_directories(params_.working_directory + "/bin");
+        std::string path_to_new_usr = params_.working_directory + "/bin";
+        message_assert(mount("/bin", path_to_new_usr.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount");
+    }
+    {
+        std::filesystem::create_directories(params_.working_directory + "/lib");
+        std::string path_to_new_usr = params_.working_directory + "/lib";
+        message_assert(mount("/lib", path_to_new_usr.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount");
+    }
+    {
+        std::filesystem::create_directories(params_.working_directory + "/lib64");
+        std::string path_to_new_usr = params_.working_directory + "/lib64";
+        message_assert(mount("/lib64", path_to_new_usr.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount");
+    }
 }
 
 void elans::runner::Runner::DeinitMount() {
-    std::string path_to_new_usr = params_.working_directory + "/usr";
-    message_assert(umount(path_to_new_usr.data()) != -1, "Failed to umount");
+    {
+        std::string path_to_new_usr = params_.working_directory + "/usr";
+        message_assert(umount(path_to_new_usr.data()) != -1, "Failed to umount /usr");
+    }
+    {
+        std::string path_to_new_usr = params_.working_directory + "/bin";
+        message_assert(umount(path_to_new_usr.data()) != -1, "Failed to umount /bin");
+    }
+    {
+        std::string path_to_new_usr = params_.working_directory + "/lib";
+        message_assert(umount(path_to_new_usr.data()) != -1, "Failed to umount /lib");
+    }
+    {
+        std::string path_to_new_usr = params_.working_directory + "/lib64";
+        message_assert(umount(path_to_new_usr.data()) != -1, "Failed to umount /lib64");
+    }
 }
 
 void _message_assert_func(bool cond, size_t line, std::string_view file, std::string_view mess) {
