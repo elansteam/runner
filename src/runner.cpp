@@ -1,7 +1,5 @@
 #include "runner/runner.h"
 
-#define LOG() do { std::cerr << __LINE__ << std::endl; } while (false)
-
 elans::runner::Runner::Runner(std::string path, elans::runner::Runner::Params params)
     : params_(params)
 {
@@ -11,16 +9,15 @@ elans::runner::Runner::Runner(std::string path, elans::runner::Runner::Params pa
     message_assert(slave_pid_ != -1, "Can't create process");
     if (slave_pid_) {
         InitCgroups();
-        InitMount();
+
         ControlExecution();
+
+        DeinitCgroups();
+        DeinitMount();
     } else {
+        InitMount();
         SetUpSlave(path);
     }
-}
-
-elans::runner::Runner::~Runner() {
-    DeinitCgroups();
-    DeinitMount();
 }
 
 void elans::runner::Runner::SetUpSlave(std::string path) {
@@ -36,7 +33,6 @@ void elans::runner::Runner::SetUpSlave(std::string path) {
     message_assert(chroot(params_.working_directory.data()) != -1, "Chroot failed");
     // message_assert(chmod(path.data(), S_IXGRP | S_IXUSR | S_IXOTH) != -1, "Failed to chmod");
 
-    EPERM;
     message_assert(setuid(params_.user) != -1, "Changing user failed");
     message_assert(getuid() == params_.user, "Changing user failed");
 
@@ -45,7 +41,6 @@ void elans::runner::Runner::SetUpSlave(std::string path) {
         return str.data();
     });
 
-    EACCES;
     message_assert(execv(path.data(), args_ptrs.data()) != -1, "Failed to execute");
 }
 
@@ -68,6 +63,7 @@ void elans::runner::Runner::ControlExecution() {
 
     int status;
     message_assert(waitpid(slave_pid_, &status, 0) != -1, "Error while waiting for slave");
+    message_assert(WIFEXITED(status) != 0, "WFT?");
     LOG();
 
     res_.cpu_time = GetCPUTime();
@@ -94,24 +90,6 @@ void elans::runner::Runner::Write(std::string path, std::string data) {
     int fd = open(path.data(), O_WRONLY | O_TRUNC);
     write(fd, data.data(), data.size());
     close(fd);
-}
-
-std::string elans::runner::Runner::Read(std::string path) {
-    int fd = open(path.data(), O_RDONLY);
-    std::string s;
-    std::string buf(1024, 0);
-    while (true) {
-        size_t read_amount = read(fd, buf.data(), 1024);
-        if (read_amount == 1024) {
-            s += buf;
-        } else {
-            buf.resize(read_amount);
-            s += buf;
-            break;
-        }
-    }
-    close(fd);
-    return s;
 }
 
 uint64_t elans::runner::Runner::GetCPUTime() {
@@ -162,41 +140,50 @@ void elans::runner::Runner::InitMount() {
     {
         std::filesystem::create_directories(params_.working_directory + "/usr");
         std::string path_to_new_usr = params_.working_directory + "/usr";
-        message_assert(mount("/usr", path_to_new_usr.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount");
+        message_assert(mount("/usr", path_to_new_usr.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount /usr");
     }
     {
         std::filesystem::create_directories(params_.working_directory + "/bin");
-        std::string path_to_new_usr = params_.working_directory + "/bin";
-        message_assert(mount("/bin", path_to_new_usr.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount");
+        std::string path_to_mounting = params_.working_directory + "/bin";
+        message_assert(mount("/bin", path_to_mounting.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount /bin");
     }
     {
         std::filesystem::create_directories(params_.working_directory + "/lib");
-        std::string path_to_new_usr = params_.working_directory + "/lib";
-        message_assert(mount("/lib", path_to_new_usr.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount");
+        std::string path_to_mounting = params_.working_directory + "/lib";
+        message_assert(mount("/lib", path_to_mounting.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount /lib");
     }
     {
         std::filesystem::create_directories(params_.working_directory + "/lib64");
-        std::string path_to_new_usr = params_.working_directory + "/lib64";
-        message_assert(mount("/lib64", path_to_new_usr.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount");
+        std::string path_to_mounting = params_.working_directory + "/lib64";
+        message_assert(mount("/lib64", path_to_mounting.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount /lib64");
+    }
+    {
+        std::filesystem::create_directories(params_.working_directory + "/proc");
+        std::string path_to_mounting = params_.working_directory + "/proc";
+        message_assert(mount("/proc", path_to_mounting.data(), "procfs", MS_BIND, nullptr) == 0, "Failed to mount /proc");
     }
 }
 
 void elans::runner::Runner::DeinitMount() {
     {
-        std::string path_to_new_usr = params_.working_directory + "/usr";
-        message_assert(umount(path_to_new_usr.data()) != -1, "Failed to umount /usr");
+        std::string path_to_mounting = params_.working_directory + "/usr";
+        message_assert(umount(path_to_mounting.data()) != -1, "Failed to umount /usr");
     }
     {
-        std::string path_to_new_usr = params_.working_directory + "/bin";
-        message_assert(umount(path_to_new_usr.data()) != -1, "Failed to umount /bin");
+        std::string path_to_mounting = params_.working_directory + "/bin";
+        message_assert(umount(path_to_mounting.data()) != -1, "Failed to umount /bin");
     }
     {
-        std::string path_to_new_usr = params_.working_directory + "/lib";
-        message_assert(umount(path_to_new_usr.data()) != -1, "Failed to umount /lib");
+        std::string path_to_mounting = params_.working_directory + "/lib";
+        message_assert(umount(path_to_mounting.data()) != -1, "Failed to umount /lib");
     }
     {
-        std::string path_to_new_usr = params_.working_directory + "/lib64";
-        message_assert(umount(path_to_new_usr.data()) != -1, "Failed to umount /lib64");
+        std::string path_to_mounting = params_.working_directory + "/lib64";
+        message_assert(umount(path_to_mounting.data()) != -1, "Failed to umount /lib64");
+    }
+    {
+        std::string path_to_mounting = params_.working_directory + "/proc";
+        message_assert(umount(path_to_mounting.data()) != -1, "Failed to umount /proc");
     }
 }
 

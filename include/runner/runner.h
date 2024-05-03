@@ -63,8 +63,6 @@ namespace elans {
 
             Runner(std::string path, Params params);
 
-            ~Runner();
-
             TestingResult GetOutput();
             
         private:
@@ -82,10 +80,6 @@ namespace elans {
             void ControlExecution();
 
             static void Write(std::string path, std::string data);
-
-            static std::string Read(std::string path);
-
-            static void SigHandler(int);
 
             uint64_t GetCPUTime();
 
