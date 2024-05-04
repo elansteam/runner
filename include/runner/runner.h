@@ -21,7 +21,8 @@
 
 #include "cgroup_manager.h"
 #include "domain.h"
-#include "mount.h"
+#include "mount_manager.h"
+#include "seccomp.h"
 
 namespace elans {
     namespace runner {

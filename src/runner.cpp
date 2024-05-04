@@ -1,5 +1,7 @@
 #include "runner/runner.h"
 
+#include "runner/seccomp_manager.h"
+
 elans::runner::Runner::Runner(std::string path, Params params)
     : params_(params)
     , slave_pid_(fork())
@@ -39,6 +41,7 @@ void elans::runner::Runner::SetUpSlave(std::string path) {
         return str.data();
     });
 
+    // InitSeccomp();
     message_assert(execv(path.data(), args_ptrs.data()) != -1, "Failed to execute");
 }
 
