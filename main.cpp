@@ -7,7 +7,7 @@ int main() {
     std::string in_path = "/home/pablo/Documents/project/runner/in.txt";
     std::string out_path = "/home/pablo/Documents/project/runner/out.txt";
     elans::runner::Runner::Params params;
-    elans::runner::Runner::Limits lims;
+    Limitations lims;
     lims.threads = 1;
     lims.memory = 1024;
     lims.cpu_time_limit = 1000;

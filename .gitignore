@@ -176,3 +176,5 @@ tester.sh
 /in.txt
 /out.txt
 /working_dir/
+/cmake-build-debug-remote/
+/cmake-build-debug-local/
