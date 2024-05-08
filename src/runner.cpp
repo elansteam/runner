@@ -20,6 +20,10 @@ elans::runner::Runner::~Runner() {
     Umount(params_.working_directory);
 }
 
+elans::runner::Runner::TestingResult elans::runner::Runner::GetOutput() const {
+    return res_;
+}
+
 void elans::runner::Runner::SetUpSlave(std::string path) {
     {
         int input = open(params_.input_stream_file.data(), O_RDONLY);
@@ -41,7 +45,7 @@ void elans::runner::Runner::SetUpSlave(std::string path) {
         return str.data();
     });
 
-    // InitSeccomp();
+    InitSeccomp();
     message_assert(execv(path.data(), args_ptrs.data()) != -1, "Failed to execute");
 }
 
@@ -64,11 +68,11 @@ void elans::runner::Runner::ControlExecution() {
 
     int status;
     message_assert(waitpid(slave_pid_, &status, 0) != -1, "Error while waiting for slave");
-    message_assert(WIFEXITED(status) != 0, "WFT?");
 
     res_.cpu_time = cgroup_manager_->GetMemoryPeak();
     res_.real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count();
     res_.memory = cgroup_manager_->GetMemoryPeak();
+    res_.exit_code = WEXITSTATUS(status);
 
     if (kill(real_time_killer_pid, SIGKILL) != 0) {
         kill(cpu_time_killer_pid, SIGKILL);
@@ -77,10 +81,10 @@ void elans::runner::Runner::ControlExecution() {
         res_.verdict = RunningResult::TL;
     } else if (cgroup_manager_->GetMemoryPeak() >= params_.lims.memory) {
         res_.verdict = RunningResult::ML;
-    } else if (WEXITSTATUS(status) != 0) {
-        res_.verdict = RunningResult::RE;
     } else if (WIFSIGNALED(status) && WTERMSIG(status) == SIGSYS) {
         res_.verdict = RunningResult::SE;
+    } else if (WEXITSTATUS(status) != 0) {
+        res_.verdict = RunningResult::RE;
     } else {
         res_.verdict = RunningResult::OK;
     }

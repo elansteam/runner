@@ -51,14 +51,15 @@ namespace elans {
                 uint64_t cpu_time; // ms
                 uint64_t real_time; // ms
                 uint64_t memory; // kb
+                int exit_code;
             };
 
             Runner(std::string path, Params params);
 
             ~Runner();
 
-            TestingResult GetOutput();
-            
+            TestingResult GetOutput() const;
+
         private:
             TestingResult res_;
             pid_t slave_pid_;

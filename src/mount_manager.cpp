@@ -17,6 +17,8 @@ void Mount(std::string working_dir) {
         message_assert(mount("/lib", path_to_mounting.data(), "ext4", MS_BIND | MS_RDONLY, nullptr) == 0, "Failed to mount /lib");
     }
     {
+        EACCES;
+        EPROTONOSUPPORT;
         std::filesystem::create_directories(working_dir + "/lib64");
         std::string path_to_mounting = working_dir + "/lib64";
         message_assert(mount("/lib64", path_to_mounting.data(), "ext4", MS_BIND | MS_RDONLY, nullptr) == 0, "Failed to mount /lib64");
