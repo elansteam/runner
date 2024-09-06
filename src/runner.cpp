@@ -1,29 +1,27 @@
 #include "runner/runner.h"
 
-#define LOG() if (true) { std::cerr << __LINE__ << std::endl; }
-
-elans::runner::Runner::Runner(std::string path, elans::runner::Runner::Params params)
-    : params_(params)
+runner::Runner::Runner(std::string path, runner::Runner::Params params)
+    : params_(std::move(params))
 {
     runner_number_ = GetRunnerNumber();
 
+//    runner::mount::InitMount(params_.working_directory);
     slave_pid_ = fork();
-    message_assert(slave_pid_ != -1, "Can't create process");
+    MessageAssert(slave_pid_ != -1, "Can't create process");
     if (slave_pid_) {
         InitCgroups();
-        InitMount();
         ControlExecution();
     } else {
-        SetUpSlave(path);
+        SetUpSlave(std::move(path));
     }
 }
 
-elans::runner::Runner::~Runner() {
+runner::Runner::~Runner() {
     DeinitCgroups();
-    DeinitMount();
+//    runner::mount::DeinitMount(params_.working_directory);
 }
 
-void elans::runner::Runner::SetUpSlave(std::string path) {
+void runner::Runner::SetUpSlave(std::string path) {
     {
         int input = open(params_.input_stream_file.data(), O_RDONLY);
         int output = open(params_.output_stream_file.data(), O_WRONLY | O_TRUNC);
@@ -32,25 +30,26 @@ void elans::runner::Runner::SetUpSlave(std::string path) {
         close(input);
         close(output);
     }
-    message_assert(chdir(params_.working_directory.data()) != -1, "Chdir failed");
-    message_assert(chroot(params_.working_directory.data()) != -1, "Chroot failed");
+    MessageAssert(chdir(params_.working_directory.data()) != -1, "Chdir failed", false);
+//    MessageAssert(chroot(params_.working_directory.data()) != -1, "Chroot failed", false);
 
-    message_assert(chmod(path.data(), S_IXGRP | S_IXUSR | S_IXOTH) != -1, "Failed to chmod");
-    message_assert(setuid(params_.user) != -1, "Changing user failed");
-    message_assert(getuid() == params_.user, "Changing user failed");
+    MessageAssert(chmod(path.data(), S_IXGRP | S_IXUSR | S_IXOTH) != -1, "Failed to chmod", false);
+
+    MessageAssert(setuid(params_.user) != -1, "Changing user failed", false);
+    MessageAssert(getuid() == params_.user, "Changing user failed", false);
 
     std::vector<char*> args_ptrs(params_.args.size());
     std::transform(params_.args.begin(), params_.args.end(), args_ptrs.begin(), [] (std::string &str) {
         return str.data();
     });
 
-    EACCES;
-    message_assert(execv(path.data(), args_ptrs.data()) != -1, "Failed to execute");
+//    system("ls /usr/bin");
+    MessageAssert(execvp(path.data(), args_ptrs.data()) != -1, "Failed to execute", false);
 }
 
-pid_t elans::runner::Runner::RunKillerByRealTime(uint64_t millis_limit) {
+pid_t runner::Runner::RunKillerByRealTime(uint64_t millis_limit) {
     pid_t killer_pid = fork();
-    message_assert(killer_pid != -1, "Can't create a process");
+    MessageAssert(killer_pid != -1, "Can't create a process");
     if (killer_pid) {
         return killer_pid;
     } else {
@@ -60,13 +59,13 @@ pid_t elans::runner::Runner::RunKillerByRealTime(uint64_t millis_limit) {
     }
 }
 
-void elans::runner::Runner::ControlExecution() {
+void runner::Runner::ControlExecution() {
     auto beg_real_time = std::chrono::high_resolution_clock::now();
     pid_t real_time_killer_pid = RunKillerByRealTime(params_.lims.real_time_limit);
     pid_t cpu_time_killer_pid = RunKillerByCpuTime(params_.lims.cpu_time_limit);
 
     int status;
-    message_assert(waitpid(slave_pid_, &status, 0) != -1, "Error while waiting for slave");
+    MessageAssert(waitpid(slave_pid_, &status, 0) != -1, "Error while waiting for slave");
 
     auto end_real_time = std::chrono::high_resolution_clock::now();
     res_.cpu_time = GetCPUTime();
@@ -89,13 +88,13 @@ void elans::runner::Runner::ControlExecution() {
     }
 }
 
-void elans::runner::Runner::Write(std::string path, std::string data) {
+void runner::Runner::Write(std::string path, std::string data) {
     int fd = open(path.data(), O_WRONLY | O_TRUNC);
     write(fd, data.data(), data.size());
     close(fd);
 }
 
-std::string elans::runner::Runner::Read(std::string path) {
+std::string runner::Runner::Read(std::string path) {
     int fd = open(path.data(), O_RDONLY);
     std::string s;
     std::string buf(1024, 0);
@@ -113,14 +112,14 @@ std::string elans::runner::Runner::Read(std::string path) {
     return s;
 }
 
-uint64_t elans::runner::Runner::GetCPUTime() {
+uint64_t runner::Runner::GetCPUTime() {
     std::ifstream fin("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/cgroup.procs");
     uint64_t ans_usec;
     fin >> ans_usec;
     return ans_usec / 1000;
 }
 
-void elans::runner::Runner::InitCgroups() const {
+void runner::Runner::InitCgroups() const {
     std::filesystem::create_directory("/sys/fs/cgroup/group" + std::to_string(runner_number_));
     Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/cgroup.procs", std::to_string(slave_pid_));
     Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.max", std::to_string(params_.lims.memory * 1024));
@@ -128,41 +127,31 @@ void elans::runner::Runner::InitCgroups() const {
     Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/pids.max", std::to_string(params_.lims.threads));
 }
 
-uint64_t elans::runner::Runner::GetMaxMemoryCgroup() const {
+uint64_t runner::Runner::GetMaxMemoryCgroup() const {
     std::ifstream fin("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.peak");
     uint64_t ans;
     fin >> ans;
     return ans / 1024;
 }
 
-void elans::runner::Runner::DeinitCgroups() const {
+void runner::Runner::DeinitCgroups() const {
     std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(runner_number_));
 }
 
-uint16_t elans::runner::Runner::GetRunnerNumber() {
+uint16_t runner::Runner::GetRunnerNumber() {
     static std::random_device rd;
     static std::mt19937 gen(rd());
     return gen();
 }
 
-pid_t elans::runner::Runner::RunKillerByCpuTime(uint64_t millis_limit) {
+pid_t runner::Runner::RunKillerByCpuTime(uint64_t millis_limit) {
     pid_t proc_pid = fork();
-    message_assert(proc_pid != -1, "Cant create a process");
+    MessageAssert(proc_pid != -1, "Cant create a process");
     if (proc_pid != 0) {
         return proc_pid;
     } else {
         while (GetCPUTime() <= millis_limit) {}
         kill(slave_pid_, SIGKILL);
         exit(EXIT_SUCCESS);
-    }
-}
-
-void _message_assert_func(bool cond, size_t line, std::string_view file, std::string_view mess) {
-    if (!cond) {
-        std::cerr << "Assertation failed at line: " << line << " of file: \"" << file << "\" with message: \"" << mess << "\"" << std::endl;
-        if (errno != 0) {
-            std::cerr << "Errno value: " << errno << std::endl;
-        }
-        exit(EXIT_FAILURE);
     }
 }
