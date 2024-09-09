@@ -10,7 +10,6 @@ void runner::mount::InitMount(const std::string &working_directory) {
     Mount("/bin", working_directory + "/bin");
     Mount("/lib", working_directory + "/lib");
     Mount("/lib64", working_directory + "/lib64");
-    std::cerr << "Mounted" << std::endl;
 }
 
 void Umount(const std::string &path) {
@@ -23,5 +22,4 @@ void runner::mount::DeinitMount(const std::string &working_directory) {
     Umount(working_directory + "/bin");
     Umount(working_directory + "/lib");
     Umount(working_directory + "/lib64");
-    std::cerr << "Umounted" << std::endl;
 }

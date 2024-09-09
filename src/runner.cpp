@@ -5,7 +5,7 @@ runner::Runner::Runner(std::string path, runner::Runner::Params params)
 {
     runner_number_ = GetRunnerNumber();
 
-//    runner::mount::InitMount(params_.working_directory);
+    runner::mount::InitMount(params_.working_directory);
     slave_pid_ = fork();
     MessageAssert(slave_pid_ != -1, "Can't create process");
     if (slave_pid_) {
@@ -18,7 +18,7 @@ runner::Runner::Runner(std::string path, runner::Runner::Params params)
 
 runner::Runner::~Runner() {
     DeinitCgroups();
-//    runner::mount::DeinitMount(params_.working_directory);
+    runner::mount::DeinitMount(params_.working_directory);
 }
 
 void runner::Runner::SetUpSlave(std::string path) {
@@ -31,7 +31,7 @@ void runner::Runner::SetUpSlave(std::string path) {
         close(output);
     }
     MessageAssert(chdir(params_.working_directory.data()) != -1, "Chdir failed", false);
-//    MessageAssert(chroot(params_.working_directory.data()) != -1, "Chroot failed", false);
+    MessageAssert(chroot(params_.working_directory.data()) != -1, "Chroot failed", false);
 
     MessageAssert(chmod(path.data(), S_IXGRP | S_IXUSR | S_IXOTH) != -1, "Failed to chmod", false);
 
@@ -42,8 +42,8 @@ void runner::Runner::SetUpSlave(std::string path) {
     std::transform(params_.args.begin(), params_.args.end(), args_ptrs.begin(), [] (std::string &str) {
         return str.data();
     });
+    args_ptrs.push_back(NULL);
 
-//    system("ls /usr/bin");
     MessageAssert(execvp(path.data(), args_ptrs.data()) != -1, "Failed to execute", false);
 }
 
