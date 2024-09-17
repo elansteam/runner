@@ -1,27 +1,24 @@
 #include "runner/runner.h"
 
 runner::Runner::Runner(std::string path, runner::Runner::Params params)
-    : params_(std::move(params))
-{
-    runner_number_ = GetRunnerNumber();
-
-    runner::mount::InitMount(params_.working_directory);
+    : params_(std::move(params)) {
+    runner::mount::Mount(params_.working_directory);
     slave_pid_ = fork();
     MessageAssert(slave_pid_ != -1, "Can't create process");
     if (slave_pid_) {
         InitCgroups();
         ControlExecution();
     } else {
-        SetUpSlave(std::move(path));
+        SetupSlave(std::move(path));
     }
 }
 
 runner::Runner::~Runner() {
     DeinitCgroups();
-    runner::mount::DeinitMount(params_.working_directory);
+    runner::mount::Umount(params_.working_directory);
 }
 
-void runner::Runner::SetUpSlave(std::string path) {
+void runner::Runner::SetupSlave(std::string path) {
     {
         int input = open(params_.input_stream_file.data(), O_RDONLY);
         int output = open(params_.output_stream_file.data(), O_WRONLY | O_TRUNC);
@@ -68,7 +65,7 @@ void runner::Runner::ControlExecution() {
     MessageAssert(waitpid(slave_pid_, &status, 0) != -1, "Error while waiting for slave");
 
     auto end_real_time = std::chrono::high_resolution_clock::now();
-    res_.cpu_time = GetCPUTime();
+    res_.cpu_time = GetCPUTimeMs();
     res_.real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count();
     res_.memory = GetMaxMemoryCgroup();
 
@@ -112,36 +109,30 @@ std::string runner::Runner::Read(std::string path) {
     return s;
 }
 
-uint64_t runner::Runner::GetCPUTime() {
-    std::ifstream fin("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/cgroup.procs");
+uint64_t runner::Runner::GetCPUTimeMs() {
+    std::ifstream fin("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/cpu.stat");
     uint64_t ans_usec;
     fin >> ans_usec;
     return ans_usec / 1000;
 }
 
 void runner::Runner::InitCgroups() const {
-    std::filesystem::create_directory("/sys/fs/cgroup/group" + std::to_string(runner_number_));
-    Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/cgroup.procs", std::to_string(slave_pid_));
-    Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.max", std::to_string(params_.lims.memory * 1024));
-    Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.low", std::to_string(params_.lims.memory * 1024 - 1));
-    Write("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/pids.max", std::to_string(params_.lims.threads));
+    std::filesystem::create_directory("/sys/fs/cgroup/group" + std::to_string(slave_pid_));
+    Write("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/cgroup.procs", std::to_string(slave_pid_));
+    Write("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/memory.max", std::to_string(params_.lims.memory * 1024));
+    Write("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/memory.low", std::to_string(params_.lims.memory * 1024 - 1));
+    Write("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/pids.max", std::to_string(params_.lims.threads));
 }
 
 uint64_t runner::Runner::GetMaxMemoryCgroup() const {
-    std::ifstream fin("/sys/fs/cgroup/group" + std::to_string(runner_number_) + "/memory.peak");
+    std::ifstream fin("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/memory.peak");
     uint64_t ans;
     fin >> ans;
     return ans / 1024;
 }
 
 void runner::Runner::DeinitCgroups() const {
-    std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(runner_number_));
-}
-
-uint16_t runner::Runner::GetRunnerNumber() {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    return gen();
+    std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(slave_pid_));
 }
 
 pid_t runner::Runner::RunKillerByCpuTime(uint64_t millis_limit) {
@@ -150,8 +141,12 @@ pid_t runner::Runner::RunKillerByCpuTime(uint64_t millis_limit) {
     if (proc_pid != 0) {
         return proc_pid;
     } else {
-        while (GetCPUTime() <= millis_limit) {}
+        while (GetCPUTimeMs() <= millis_limit) {}
         kill(slave_pid_, SIGKILL);
         exit(EXIT_SUCCESS);
     }
+}
+
+const runner::Runner::TestingResult &runner::Runner::GetOutput() const {
+    return res_;
 }

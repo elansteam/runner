@@ -62,15 +62,14 @@ namespace runner {
 
         ~Runner();
 
-        TestingResult GetOutput();
+        const TestingResult &GetOutput() const;
 
     private:
         TestingResult res_;
         pid_t slave_pid_;
-        uint32_t runner_number_;
         Params params_;
 
-        void SetUpSlave(std::string path);
+        void SetupSlave(std::string path);
 
         pid_t RunKillerByRealTime(uint64_t millis_limit);
 
@@ -82,14 +81,12 @@ namespace runner {
 
         static std::string Read(std::string path);
 
-        uint64_t GetCPUTime();
+        uint64_t GetCPUTimeMs();
 
         void InitCgroups() const;
 
         uint64_t GetMaxMemoryCgroup() const;
 
         void DeinitCgroups() const;
-
-        static uint16_t GetRunnerNumber();
     };
 } // namespace runner
