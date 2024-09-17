@@ -1,4 +1,14 @@
+#include <vector>
 #include "../include/runner/mount.h"
+
+using std::string_literals::operator""s;
+
+std::array mounting_dirs = {
+    "/usr"s,
+    "/bin"s,
+    "/lib"s,
+    "/lib64"s
+};
 
 void Mount(const std::string &from, const std::string &to) {
     std::filesystem::create_directories(to);
@@ -6,10 +16,9 @@ void Mount(const std::string &from, const std::string &to) {
 }
 
 void runner::mount::Mount(const std::string &working_directory) {
-    ::Mount("/usr", working_directory + "/usr");
-    ::Mount("/bin", working_directory + "/bin");
-    ::Mount("/lib", working_directory + "/lib");
-    ::Mount("/lib64", working_directory + "/lib64");
+    for (const std::string &dir : mounting_dirs) {
+        ::Mount(dir, working_directory + dir);
+    }
 }
 
 void Umount(const std::string &path) {
@@ -18,8 +27,7 @@ void Umount(const std::string &path) {
 }
 
 void runner::mount::Umount(const std::string &working_directory) {
-    ::Umount(working_directory + "/usr");
-    ::Umount(working_directory + "/bin");
-    ::Umount(working_directory + "/lib");
-    ::Umount(working_directory + "/lib64");
+    for (const std::string &dir : mounting_dirs) {
+        ::Umount(working_directory + dir);
+    }
 }

@@ -49,11 +49,10 @@ pid_t runner::Runner::RunKillerByRealTime(uint64_t millis_limit) {
     MessageAssert(killer_pid != -1, "Can't create a process");
     if (killer_pid) {
         return killer_pid;
-    } else {
-        std::this_thread::sleep_for(std::chrono::milliseconds(millis_limit));
-        kill(slave_pid_, SIGKILL);
-        exit(EXIT_SUCCESS);
     }
+    std::this_thread::sleep_for(std::chrono::milliseconds(millis_limit));
+    kill(slave_pid_, SIGKILL);
+    exit(EXIT_SUCCESS);
 }
 
 void runner::Runner::ControlExecution() {
@@ -66,7 +65,7 @@ void runner::Runner::ControlExecution() {
 
     auto end_real_time = std::chrono::high_resolution_clock::now();
     res_.cpu_time = GetCPUTimeMs();
-    res_.real_time = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count();
+    res_.real_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count();
     res_.memory = GetMaxMemoryCgroup();
 
     if (kill(real_time_killer_pid, SIGKILL) != 0) {
