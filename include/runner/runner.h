@@ -35,9 +35,9 @@ namespace runner {
 
         struct Limits {
             uint64_t threads;
-            uint64_t memory; // kb
-            uint64_t cpu_time_limit; // ms
-            uint64_t real_time_limit; // ms
+            uint64_t memory_kb;
+            uint64_t cpu_time_limit_ms;
+            uint64_t real_time_limit_ms;
             bool allow_files_write;
             bool allow_files_read;
         };
@@ -53,9 +53,9 @@ namespace runner {
 
         struct TestingResult {
             RunningResult verdict;
-            uint64_t cpu_time; // ms
-            uint64_t real_time; // ms
-            uint64_t memory; // kb
+            uint64_t cpu_time_ms;
+            uint64_t real_time_ms;
+            uint64_t memory_kb;
         };
 
         Runner(std::string path, Params params);
@@ -83,6 +83,8 @@ namespace runner {
 
         uint64_t GetCPUTimeMs();
 
+        void WriteToCgroupFile(const std::string &file, const std::string &val) const;
+        void WriteToCgroupFile(const std::string &file, int64_t val) const;
         void CreateCgroups() const;
 
         uint64_t GetMaxMemoryCgroup() const;

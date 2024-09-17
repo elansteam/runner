@@ -1,9 +1,14 @@
 #include "../include/runner/message_assert.h"
 
-void MessageAssert(bool cond, std::string_view message, bool call_destructors, std::source_location loc) {
+void MessageAssert(bool cond,
+                   std::string_view message,
+                   bool call_destructors,
+                   std::source_location loc) {
     if (!cond) {
-        auto error_message = std::format("Execution failed at {} line, in fucntion {}, of file \"{}\" with message: {}",
-                                         loc.line(), loc.function_name(), loc.file_name(), message);
+        using std::string_literals::operator""s;
+        auto error_message = std::format(
+            "Error at {} line, in function {}, of file \"{}\" with message: {}",
+            loc.line(), loc.function_name(), loc.file_name(), message);
         if (errno != 0) {
             error_message += std::format("\nErrno value: {}", errno);
         }

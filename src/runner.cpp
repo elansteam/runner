@@ -21,27 +21,33 @@ runner::Runner::~Runner() {
 void runner::Runner::SetupSlave(std::string path) {
     {
         int input = open(params_.input_stream_file.data(), O_RDONLY);
-        int output = open(params_.output_stream_file.data(), O_WRONLY | O_TRUNC);
+        int output = open(params_.output_stream_file.data(),
+                          O_WRONLY | O_TRUNC);
         dup2(input, STDIN_FILENO);
         dup2(output, STDOUT_FILENO);
         close(input);
         close(output);
     }
-    MessageAssert(chdir(params_.working_directory.data()) != -1, "Chdir failed", false);
-    MessageAssert(chroot(params_.working_directory.data()) != -1, "Chroot failed", false);
+    MessageAssert(chdir(params_.working_directory.data()) != -1,
+                  "Chdir failed", false);
+    MessageAssert(chroot(params_.working_directory.data()) != -1,
+                  "Chroot failed", false);
 
-    MessageAssert(chmod(path.data(), S_IXGRP | S_IXUSR | S_IXOTH) != -1, "Failed to chmod", false);
+    MessageAssert(chmod(path.data(), S_IXGRP | S_IXUSR | S_IXOTH) != -1,
+                  "Failed to chmod", false);
 
     MessageAssert(setuid(params_.user) != -1, "Changing user failed", false);
     MessageAssert(getuid() == params_.user, "Changing user failed", false);
 
     std::vector<char*> args_ptrs(params_.args.size());
-    std::transform(params_.args.begin(), params_.args.end(), args_ptrs.begin(), [] (std::string &str) {
+    std::transform(params_.args.begin(), params_.args.end(),
+                   args_ptrs.begin(), [] (std::string &str) {
         return str.data();
     });
     args_ptrs.push_back(nullptr);
 
-    MessageAssert(execvp(path.data(), args_ptrs.data()) != -1, "Failed to execute", false);
+    MessageAssert(execvp(path.data(), args_ptrs.data()) != -1,
+                  "Failed to execute", false);
 }
 
 pid_t runner::Runner::RunKillerByRealTime(uint64_t millis_limit) {
@@ -57,23 +63,27 @@ pid_t runner::Runner::RunKillerByRealTime(uint64_t millis_limit) {
 
 void runner::Runner::ControlExecution() {
     auto beg_real_time = std::chrono::high_resolution_clock::now();
-    pid_t real_time_killer_pid = RunKillerByRealTime(params_.lims.real_time_limit);
-    pid_t cpu_time_killer_pid = RunKillerByCpuTime(params_.lims.cpu_time_limit);
+    pid_t real_time_killer_pid = RunKillerByRealTime(
+        params_.lims.real_time_limit_ms);
+    pid_t cpu_time_killer_pid = RunKillerByCpuTime(
+        params_.lims.cpu_time_limit_ms);
 
     int status;
-    MessageAssert(waitpid(slave_pid_, &status, 0) != -1, "Error while waiting for slave");
+    MessageAssert(waitpid(slave_pid_, &status, 0) != -1,
+                  "Error while waiting for slave");
 
     auto end_real_time = std::chrono::high_resolution_clock::now();
-    res_.cpu_time = GetCPUTimeMs();
-    res_.real_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - beg_real_time).count();
-    res_.memory = GetMaxMemoryCgroup();
+    res_.cpu_time_ms = GetCPUTimeMs();
+    res_.real_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::high_resolution_clock::now() - beg_real_time).count();
+    res_.memory_kb = GetMaxMemoryCgroup();
 
     if (kill(real_time_killer_pid, SIGKILL) != 0) {
         kill(cpu_time_killer_pid, SIGKILL);
         res_.verdict = RunningResult::IE;
     } else if (kill(cpu_time_killer_pid, SIGKILL) != 0) {
         res_.verdict = RunningResult::TL;
-    } else if (GetMaxMemoryCgroup() >= params_.lims.memory) {
+    } else if (GetMaxMemoryCgroup() >= params_.lims.memory_kb) {
         res_.verdict = RunningResult::ML;
     } else if (WEXITSTATUS(status) != 0) {
         res_.verdict = RunningResult::RE;
@@ -109,29 +119,34 @@ std::string runner::Runner::Read(std::string path) {
 }
 
 uint64_t runner::Runner::GetCPUTimeMs() {
-    std::ifstream fin("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/cpu.stat");
+    std::ifstream fin("/sys/fs/cgroup/group" +
+                      std::to_string(slave_pid_) +
+                      "/cpu.stat");
     uint64_t ans_usec;
     fin >> ans_usec;
     return ans_usec / 1000;
 }
 
 void runner::Runner::CreateCgroups() const {
-    std::filesystem::create_directory("/sys/fs/cgroup/group" + std::to_string(slave_pid_));
-    Write("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/cgroup.procs", std::to_string(slave_pid_));
-    Write("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/memory.max", std::to_string(params_.lims.memory * 1024));
-    Write("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/memory.low", std::to_string(params_.lims.memory * 1024 - 1));
-    Write("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/pids.max", std::to_string(params_.lims.threads));
+    std::filesystem::create_directory("/sys/fs/cgroup/group" +
+                                      std::to_string(slave_pid_));
+    WriteToCgroupFile("cgroup.procs", slave_pid_);
+    WriteToCgroupFile("memory.max", params_.lims.memory_kb * 1024);
+    WriteToCgroupFile("memory.lo", params_.lims.memory_kb * 1024 - 1);
+    WriteToCgroupFile("pids.max", params_.lims.threads);
 }
 
 uint64_t runner::Runner::GetMaxMemoryCgroup() const {
-    std::ifstream fin("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/memory.peak");
+    std::ifstream fin("/sys/fs/cgroup/group" +
+                        std::to_string(slave_pid_) +
+                        "/memory.peak");
     uint64_t ans;
     fin >> ans;
     return ans / 1024;
 }
 
 void runner::Runner::DestroyCgroups() const {
-    std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(slave_pid_));
+    std::filesystem::remove(std::format("/sys/fs/cgroup/group{}", slave_pid_));
 }
 
 pid_t runner::Runner::RunKillerByCpuTime(uint64_t millis_limit) {
@@ -148,4 +163,14 @@ pid_t runner::Runner::RunKillerByCpuTime(uint64_t millis_limit) {
 
 const runner::Runner::TestingResult &runner::Runner::GetOutput() const {
     return res_;
+}
+
+void runner::Runner::WriteToCgroupFile(const std::string &file,
+                                       const std::string &val) const {
+    Write(std::format("/sys/fs/cgroup/group{}/{}", slave_pid_, file), val);
+}
+
+void runner::Runner::WriteToCgroupFile(const std::string &file,
+                                       int64_t val) const {
+    WriteToCgroupFile(file, std::to_string(val));
 }

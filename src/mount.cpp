@@ -12,7 +12,8 @@ std::array mounting_dirs = {
 
 void Mount(const std::string &from, const std::string &to) {
     std::filesystem::create_directories(to);
-    MessageAssert(mount(from.data(), to.data(), "ext4", MS_BIND, nullptr) == 0, "Failed to mount " + from);
+    MessageAssert(mount(from.data(), to.data(), "ext4", MS_BIND, nullptr) == 0,
+                  "Failed to mount " + from);
 }
 
 void runner::mount::Mount(const std::string &working_directory) {
