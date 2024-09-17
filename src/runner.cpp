@@ -42,7 +42,7 @@ void runner::Runner::SetUpSlave(std::string path) {
     std::transform(params_.args.begin(), params_.args.end(), args_ptrs.begin(), [] (std::string &str) {
         return str.data();
     });
-    args_ptrs.push_back(NULL);
+    args_ptrs.push_back(nullptr);
 
     MessageAssert(execvp(path.data(), args_ptrs.data()) != -1, "Failed to execute", false);
 }
