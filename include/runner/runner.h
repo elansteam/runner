@@ -59,9 +59,7 @@ namespace runner {
         };
 
         Runner(std::string path, Params params);
-
         ~Runner();
-
         const TestingResult &GetOutput() const;
 
     private:
@@ -70,25 +68,16 @@ namespace runner {
         Params params_;
 
         void SetupSlave(std::string path);
-
         pid_t RunKillerByRealTime(uint64_t millis_limit);
-
         pid_t RunKillerByCpuTime(uint64_t millis_limit);
-
         void ControlExecution();
-
         static void Write(std::string path, std::string data);
-
         static std::string Read(std::string path);
-
         uint64_t GetCPUTimeMs();
-
         void WriteToCgroupFile(const std::string &file, const std::string &val) const;
         void WriteToCgroupFile(const std::string &file, int64_t val) const;
         void CreateCgroups() const;
-
         uint64_t GetMaxMemoryCgroup() const;
-
         void DestroyCgroups() const;
     };
 } // namespace runner

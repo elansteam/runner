@@ -6,6 +6,5 @@
 
 namespace runner::mount {
     void Mount(const std::string &working_directory);
-
     void Umount(const std::string &working_directory);
 } // namespace runner::mount
