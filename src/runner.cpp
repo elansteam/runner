@@ -6,7 +6,7 @@ runner::Runner::Runner(std::string path, runner::Runner::Params params)
     slave_pid_ = fork();
     MessageAssert(slave_pid_ != -1, "Can't create process");
     if (slave_pid_) {
-        InitCgroups();
+        CreateCgroups();
         ControlExecution();
     } else {
         SetupSlave(std::move(path));
@@ -14,7 +14,7 @@ runner::Runner::Runner(std::string path, runner::Runner::Params params)
 }
 
 runner::Runner::~Runner() {
-    DeinitCgroups();
+    DestroyCgroups();
     runner::mount::Umount(params_.working_directory);
 }
 
@@ -116,7 +116,7 @@ uint64_t runner::Runner::GetCPUTimeMs() {
     return ans_usec / 1000;
 }
 
-void runner::Runner::InitCgroups() const {
+void runner::Runner::CreateCgroups() const {
     std::filesystem::create_directory("/sys/fs/cgroup/group" + std::to_string(slave_pid_));
     Write("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/cgroup.procs", std::to_string(slave_pid_));
     Write("/sys/fs/cgroup/group" + std::to_string(slave_pid_) + "/memory.max", std::to_string(params_.lims.memory * 1024));
@@ -131,7 +131,7 @@ uint64_t runner::Runner::GetMaxMemoryCgroup() const {
     return ans / 1024;
 }
 
-void runner::Runner::DeinitCgroups() const {
+void runner::Runner::DestroyCgroups() const {
     std::filesystem::remove("/sys/fs/cgroup/group" + std::to_string(slave_pid_));
 }
 

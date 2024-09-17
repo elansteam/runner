@@ -83,10 +83,10 @@ namespace runner {
 
         uint64_t GetCPUTimeMs();
 
-        void InitCgroups() const;
+        void CreateCgroups() const;
 
         uint64_t GetMaxMemoryCgroup() const;
 
-        void DeinitCgroups() const;
+        void DestroyCgroups() const;
     };
 } // namespace runner
