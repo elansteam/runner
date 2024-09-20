@@ -46,6 +46,8 @@ void runner::Runner::SetupSlave(std::string path) {
     });
     args_ptrs.push_back(nullptr);
 
+    InitSeccomp();
+
     MessageAssert(execvp(path.data(), args_ptrs.data()) != -1,
                   "Failed to execute", false);
 }

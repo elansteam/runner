@@ -20,6 +20,7 @@
 #include <sys/stat.h>
 
 #include "mount.h"
+#include "init-seccomp.h"
 
 namespace runner {
     class Runner {
