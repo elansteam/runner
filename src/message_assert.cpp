@@ -7,8 +7,8 @@ void MessageAssert(bool cond,
     if (!cond) {
         using std::string_literals::operator""s;
         auto error_message = std::format(
-            "Error at {} line, in function {}, of file \"{}\" with message: {}",
-            loc.line(), loc.function_name(), loc.file_name(), message);
+            "{}:{}: {}: {}",
+            loc.file_name(), loc.line(), loc.function_name(), message);
         if (errno != 0) {
             error_message += std::format("\nErrno value: {}", errno);
         }
